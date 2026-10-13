@@ -185,6 +185,102 @@
 
   <!-- 6. LOGIKA WEBGIS JAVASCRIPT -->
   <script>
+    // Variable untuk menyimpan Marker & Circle Akurasi Posisi
+    let userMarker = null;
+    let accuracyCircle = null;
+    let isTracking = false;
+    
+    // Icon Kustom untuk Posisi Pengguna (Titik Biru GPS)
+    const userGpsIcon = L.divIcon({
+      className: 'custom-gps-marker',
+      html: `<div class="w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-lg pulse-animation"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+    
+    // CSS untuk efek Pulse (Lingkaran Berdenyut) pada Marker GPS
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+      }
+      .pulse-animation {
+        animation: pulse 2s infinite;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // =========================================================
+    // EVEVT LISTENER LEAFLET FOR GEOLOCATION
+    // =========================================================
+    
+    // 1. Ketika lokasi berhasil ditemukan
+    map.on('locationfound', function (e) {
+      const radius = e.accuracy; // Akurasi GPS dalam meter
+      const latlng = e.latlng;
+    
+      // Jika marker belum ada, buat baru. Jika sudah ada, perbarui posisinya.
+      if (!userMarker) {
+        userMarker = L.marker(latlng, { icon: userGpsIcon }).addTo(map);
+        accuracyCircle = L.circle(latlng, {
+          radius: radius,
+          color: '#2563eb',
+          fillColor: '#60a5fa',
+          fillOpacity: 0.15,
+          weight: 1
+        }).addTo(map);
+    
+        userMarker.bindPopup(`
+          <div style="font-family:sans-serif; font-size:11px;">
+            <b>Posisi Anda saat ini</b><br>
+            Akurasi GPS: +/- ${Math.round(radius)} meter
+          </div>
+        `);
+      } else {
+        userMarker.setLatLng(latlng);
+        accuracyCircle.setLatLng(latlng);
+        accuracyCircle.setRadius(radius);
+      }
+    
+      // Zoom ke posisi pengguna saat pertama kali tombol ditekan
+      if (!isTracking) {
+        map.flyTo(latlng, 17, { animate: true, duration: 1.5 });
+        isTracking = true;
+      }
+    });
+    
+    // 2. Ketika lokasi gagal/akses GPS ditolak
+    map.on('locationerror', function (e) {
+      alert("Gagal mendapatkan lokasi GPS: " + e.message + "\nPastikan Izin Lokasi (GPS) pada HP/Browser Anda telah diaktifkan.");
+      document.getElementById('btn-gps').classList.remove('text-emerald-600', 'bg-emerald-50');
+      isTracking = false;
+    });
+    
+    // 3. Logika Klik Tombol GPS
+    document.getElementById('btn-gps').addEventListener('click', function () {
+      const btn = this;
+    
+      if (!isTracking) {
+        // Mulai Lacak Lokasi
+        map.locate({
+          setView: false,
+          watch: true,            // Pantau lokasi secara real-time saat berjalan
+          enableHighAccuracy: true // Pakai GPS hardware HP agar presisi tinggi
+        });
+        btn.classList.add('text-emerald-600', 'bg-emerald-50', 'border-emerald-300');
+      } else {
+        // Matikan Pelacakan
+        map.stopLocate();
+        if (userMarker) map.removeLayer(userMarker);
+        if (accuracyCircle) map.removeLayer(accuracyCircle);
+        userMarker = null;
+        accuracyCircle = null;
+        isTracking = false;
+        btn.classList.remove('text-emerald-600', 'bg-emerald-50', 'border-emerald-300');
+      }
+    });
     // =========================================================
     // 1. INISIALISASI PETA & BASEMAP
     // =========================================================
