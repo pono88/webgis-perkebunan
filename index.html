@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebGIS Monitoring Produksi Perkebunan</title>
+
+  <!-- 1. Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 2. Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- 3. FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <style>
+    /* Custom Scrollbar untuk Sidebar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #059669;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col md:flex-row overflow-hidden font-sans">
+
+  <!-- ========================================================= -->
+  <!-- SIDEBAR (PANEL KIRI)                                      -->
+  <!-- ========================================================= -->
+  <aside class="w-full md:w-96 bg-white shadow-xl z-20 flex flex-col h-full border-r border-gray-200">
+    
+    <!-- Header Sidebar -->
+    <div class="p-4 bg-emerald-800 text-white flex items-center justify-between">
+      <div>
+        <h1 class="font-bold text-base flex items-center gap-2">
+          <i class="fa-solid fa-tree text-emerald-400"></i>
+          WebGIS Perkebunan
+        </h1>
+        <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
+      </div>
+      <span class="bg-emerald-900 text-emerald-300 text-[10px] font-semibold px-2 py-1 rounded">v1.0</span>
+    </div>
+
+    <!-- Isi Scrollable Sidebar -->
+    <div class="p-4 overflow-y-auto flex-1 space-y-5">
+
+      <!-- 1. CASCADING FILTER SELECTION -->
+      <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
+        <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
+        </h2>
+        
+        <!-- Filter PT -->
+        <div>
+          <label for="filter-pt" class="block text-xs font-medium text-gray-600 mb-1">Perusahaan (PT)</label>
+          <select id="filter-pt" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="ALL">-- Semua PT --</option>
+            <option value="PT_DHARMA_AGRO">PT Dharma Agronomy</option>
+          </select>
+        </div>
+
+        <!-- Filter Estate -->
+        <div>
+          <label for="filter-estate" class="block text-xs font-medium text-gray-600 mb-1">Estate</label>
+          <select id="filter-estate" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="ALL">-- Semua Estate --</option>
+            <option value="ESTATE_ALPHA">Estate Alpha</option>
+            <option value="ESTATE_BETA">Estate Beta</option>
+          </select>
+        </div>
+
+        <!-- Filter Afdeling -->
+        <div>
+          <label for="filter-afdeling" class="block text-xs font-medium text-gray-600 mb-1">Afdeling</label>
+          <select id="filter-afdeling" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="ALL">-- Semua Afdeling --</option>
+            <option value="AFD_1">Afdeling I</option>
+            <option value="AFD_2">Afdeling II</option>
+            <option value="AFD_3">Afdeling III</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- 2. QUICK SEARCH BLOK -->
+      <section>
+        <div class="relative">
+          <input type="text" id="search-blok" placeholder="Cari Nomor Blok (misal: A01)..." 
+                 class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+        </div>
+      </section>
+
+      <!-- 3. WIDGET SUMMARY KPI -->
+      <section>
+        <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <i class="fa-solid fa-chart-line text-emerald-600"></i> Ringkasan KPI
+        </h2>
+        <div class="grid grid-cols-2 gap-2.5">
+          
+          <!-- KPI: Total Produksi -->
+          <div class="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
+            <p class="text-[10px] font-medium text-emerald-700">Total Produksi</p>
+            <p class="text-sm font-bold text-emerald-900 mt-0.5" id="kpi-produksi">0 Ton</p>
+          </div>
+
+          <!-- KPI: Rata-rata Yield -->
+          <div class="bg-blue-50 p-2.5 rounded-lg border border-blue-100">
+            <p class="text-[10px] font-medium text-blue-700">Rata-rata Yield</p>
+            <p class="text-sm font-bold text-blue-900 mt-0.5" id="kpi-yield">0 Ton/Ha</p>
+          </div>
+
+          <!-- KPI: Total Luas -->
+          <div class="bg-amber-50 p-2.5 rounded-lg border border-amber-100">
+            <p class="text-[10px] font-medium text-amber-700">Luas TM</p>
+            <p class="text-sm font-bold text-amber-900 mt-0.5" id="kpi-luas">0 Ha</p>
+          </div>
+
+          <!-- KPI: Rata-rata SPH -->
+          <div class="bg-purple-50 p-2.5 rounded-lg border border-purple-100">
+            <p class="text-[10px] font-medium text-purple-700">Rata-rata SPH</p>
+            <p class="text-sm font-bold text-purple-900 mt-0.5" id="kpi-sph">0 Pokok/Ha</p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 4. PANEL DETAIL BLOK & GRAFIK (Wadah Chart.js) -->
+      <section id="panel-detail" class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+        <h2 class="text-xs font-bold text-gray-800 border-b pb-2 mb-3 flex items-center justify-between">
+          <span><i class="fa-solid fa-circle-info text-emerald-600 mr-1"></i> Detail Blok</span>
+          <span id="detail-blok-id" class="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono">Pilih Blok</span>
+        </h2>
+
+        <!-- Tabel Ringkasan Atribut -->
+        <div class="text-xs space-y-1.5 text-gray-600 mb-4">
+          <div class="flex justify-between"><span>Tahun Tanam:</span> <b id="detail-tt" class="text-gray-900">-</b></div>
+          <div class="flex justify-between"><span>Luas TM:</span> <b id="detail-luas" class="text-gray-900">- Ha</b></div>
+          <div class="flex justify-between"><span>Jumlah Pokok (SPH):</span> <b id="detail-sph" class="text-gray-900">- Pokok/Ha</b></div>
+          <div class="flex justify-between"><span>Yield Produksi:</span> <b id="detail-yield" class="text-emerald-700 font-bold">- Ton/Ha</b></div>
+        </div>
+
+        <!-- Wadah Canvas Grafik Chart.js -->
+        <div>
+          <p class="text-[11px] font-semibold text-gray-700 mb-1">Tren Produksi Bulanan (Ton)</p>
+          <div class="h-40 w-full relative">
+            <canvas id="chartProduksi"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. LEGENDA TEMATIK YIELD -->
+      <section class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+        <h2 class="text-[11px] font-bold text-gray-700 uppercase mb-2">Legenda Yield (Ton/Ha)</h2>
+        <div class="grid grid-cols-2 gap-1.5 text-[10px]">
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-[#2b8a3e] inline-block"></span> > 22 Ton/Ha</div>
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-[#74b816] inline-block"></span> 18 - 22 Ton/Ha</div>
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-[#f59f00] inline-block"></span> 14 - 18 Ton/Ha</div>
+          <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-[#e03131] inline-block"></span> < 14 Ton/Ha</div>
+        </div>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- ========================================================= -->
+  <!-- AREA MAPS (PANEL KANAN)                                   -->
+  <!-- ========================================================= -->
+  <main class="flex-1 h-full relative">
+    <div id="map" class="w-full h-full z-10"></div>
+  </main>
+
+  <!-- 4. Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- 5. Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- 6. LOGIKA WEBGIS JAVASCRIPT -->
+  <script>
+    // =========================================================
+    // 1. INISIALISASI PETA & BASEMAP
+    // =========================================================
+    const map = L.map('map').setView([-2.21, 113.92], 13);
+
+    // Basemap OpenStreetMap
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // Basemap Esri Satellite
+    const esriSatelit = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: 'Tiles &copy; Esri' }
+    );
+
+    // Layer Control
+    L.control.layers({ "OpenStreetMap": osm, "Satelit (Esri)": esriSatelit }, null, { position: 'topright' }).addTo(map);
+
+    // Variable Global
+    let geojsonLayer = null;
+    let chartInstance = null;
+    let currentData = [];
+
+    // =========================================================
+    // 2. FUNGSI KLASIFIKASI WARNA TEMATIK (CHOROPLETH YIELD)
+    // =========================================================
+    function getColor(yieldHa) {
+      return yieldHa > 22 ? '#2b8a3e' : // Dark Green
+             yieldHa > 18 ? '#74b816' : // Light Green
+             yieldHa > 14 ? '#f59f00' : // Orange
+                            '#e03131';   // Red
+    }
+
+    function styleBlok(feature) {
+      return {
+        fillColor: getColor(feature.properties.YIELD_TON_HA),
+        weight: 1.5,
+        opacity: 1,
+        color: '#ffffff',
+        fillOpacity: 0.75
+      };
+    }
+
+    // =========================================================
+    // 3. SAMPLE DATA GEOJSON PERKEBUNAN
+    // =========================================================
+    const dataPerkebunanGeoJSON = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "ID_BLOK": "A01",
+            "PT": "PT_DHARMA_AGRO",
+            "ESTATE": "ESTATE_ALPHA",
+            "AFDELING": "AFD_1",
+            "TAHUN_TANAM": 2017,
+            "LUAS_HA": 30.5,
+            "SPH": 136,
+            "YIELD_TON_HA": 24.2,
+            "PROD_TOTAL_TON": 738.1,
+            "PROD_BULANAN": [55, 60, 58, 62, 65, 70, 68, 64, 62, 59, 58, 57.1]
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[113.90, -2.20], [113.91, -2.20], [113.91, -2.21], [113.90, -2.21], [113.90, -2.20]]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "ID_BLOK": "A02",
+            "PT": "PT_DHARMA_AGRO",
+            "ESTATE": "ESTATE_ALPHA",
+            "AFDELING": "AFD_1",
+            "TAHUN_TANAM": 2018,
+            "LUAS_HA": 28.0,
+            "SPH": 135,
+            "YIELD_TON_HA": 19.5,
+            "PROD_TOTAL_TON": 546.0,
+            "PROD_BULANAN": [40, 42, 45, 48, 50, 52, 49, 46, 44, 43, 42, 45]
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[113.91, -2.20], [113.92, -2.20], [113.92, -2.21], [113.91, -2.21], [113.91, -2.20]]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "ID_BLOK": "B01",
+            "PT": "PT_DHARMA_AGRO",
+            "ESTATE": "ESTATE_ALPHA",
+            "AFDELING": "AFD_2",
+            "TAHUN_TANAM": 2019,
+            "LUAS_HA": 32.0,
+            "SPH": 130,
+            "YIELD_TON_HA": 15.8,
+            "PROD_TOTAL_TON": 505.6,
+            "PROD_BULANAN": [35, 38, 40, 42, 45, 48, 46, 43, 41, 40, 42, 45.6]
+          },
+          "geometry": {
+            "type": "Polygon",
+            "
