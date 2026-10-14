@@ -210,7 +210,7 @@
 
 
     // =========================================================
-    // STATE DATA & NORMALISASI PENCARIAN TAHUN & ID BLOK
+    // STATE DATA & PARSER CSV MURNI
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -221,10 +221,7 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function cleanKey(k) { return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-    
-    function cleanBlokId(str) { 
-      return String(str || '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); 
-    }
+    function cleanBlokId(str) { return String(str || '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); }
 
     function getPropByFuzzyKey(p, targetKeys) {
       for (let key in p) {
@@ -252,20 +249,18 @@
       return isNaN(parseFloat(str)) ? 0 : parseFloat(str);
     }
 
-    // PENGAMBILAN DATA PRODUKSI BERDASARKAN TAHUN (JIKA 'ALL', OTOMATIS AMBIL TAHUN TERAKHIR DI CSV)
+    // Ambil data bulanan & total ton per blok berdasarkan tahun
     function getProductionDataForBlok(blokId, selectedYear) {
       let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
       let cleanId = cleanBlokId(blokId);
       
       if (csvHistoriData[cleanId]) {
-        // Jika targetYear tidak ditemukan, fallback ke tahun pertama yang tersedia pada blok tersebut
         let activeYearData = csvHistoriData[cleanId][targetYear] || csvHistoriData[cleanId][Object.keys(csvHistoriData[cleanId])[0]];
         if (activeYearData) return activeYearData;
       }
       return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
-    // MESIN PENGOLAH CSV DENGAN AKUMULASI OTOMATIS BULAN & TAHUN
     function processCsvData(dataRows) {
       csvHistoriData = {};
       let yearsSet = new Set();
@@ -328,27 +323,24 @@
           }
 
           if (bIdx >= 0 && bIdx < 12) {
-            tempContainer[blokId][tahun].bulanan[bIdx] = tonVal;
+            tempContainer[blokId][tahun].bulanan[bIdx] += tonVal; // Akumulasi jika ada baris bulan ganda
           }
         }
       });
 
-      // Kalkulasi total ton pertahun untuk setiap blok
       for (let bId in tempContainer) {
         csvHistoriData[bId] = {};
         for (let thn in tempContainer[bId]) {
           let arrBulan = tempContainer[bId][thn].bulanan;
           let sumTotal = arrBulan.reduce((a, b) => a + b, 0);
           
-          // Jika baris CSV sudah langsung memiliki total atau data per baris tanpa pecahan bulan spesifik
           if (sumTotal === 0) {
-            // Cek apakah ada nilai ton langsung di baris tersebut
             dataRows.forEach(r => {
               let rBlok = cleanBlokId(r['ID_Blok'] || r['blok'] || '');
               let rThn = String(r['Tahun'] || r['tahun'] || '').trim();
               if (rBlok === bId && rThn === thn) {
                 let tVal = parseAngka(r['Ton'] || r['ton'] || 0);
-                if (tVal > 0) sumTotal = tVal;
+                if (tVal > 0) sumTotal += tVal;
               }
             });
           }
@@ -375,7 +367,6 @@
         tahunSelect.value = currentSelectedYear;
       }
 
-      console.log("Data CSV Terproses:", csvHistoriData);
       if (rawGeoJsonData) applyFilter();
     }
 
@@ -395,7 +386,7 @@
 
 
     // =========================================================
-    // RENDER PETA & KPI
+    // RENDER PETA & KPI (SUM LANGSUNG DARI KOLOM TON CSV)
     // =========================================================
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
@@ -427,6 +418,7 @@
       }).addTo(map);
 
       let tLuas = 0, tProd = 0, totalSphSum = 0, count = 0;
+      
       dataToRender.features.forEach(f => {
         let p = f.properties;
         let l = getLuasValue(p);
@@ -435,7 +427,7 @@
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
         tLuas += l; 
-        tProd += prodInfo.total; 
+        tProd += prodInfo.total; // Akumulasi total nilai Ton langsung dari CSV sesuai filter
         totalSphSum += sph; 
         count++;
       });
