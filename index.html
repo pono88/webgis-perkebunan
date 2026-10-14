@@ -95,7 +95,7 @@
           <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
         </h2>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Perusahaan (PT)</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Perusahaan (PT / Company)</label>
           <select id="filter-pt" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
             <option value="ALL">-- Semua PT --</option>
           </select>
@@ -391,7 +391,7 @@
     });
 
     // =========================================================
-    // 4. DATA GEOJSON & PENGISIAN FILTER OTOMATIS DARI test.json
+    // 4. DATA GEOJSON & PENGISIAN FILTER OTOMATIS BERDASARKAN KATA KUNCI PT / COMPANY
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -399,7 +399,21 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
-    // Helper untuk mendeteksi nilai properti dengan berbagai kemungkinan nama kolom
+    // Fungsi cerdas untuk mendeteksi atribut PT/Company secara fleksibel (tidak peduli huruf besar/kecil)
+    function getPTValue(properties) {
+      for (let key in properties) {
+        const lowerKey = key.toLowerCase();
+        // Cek apakah nama kolom mengandung kata 'pt' atau 'company' atau 'perusahaan'
+        if (lowerKey.includes('pt') || lowerKey.includes('company') || lowerKey.includes('perusahaan')) {
+          const val = properties[key];
+          if (val !== undefined && val !== null && String(val).trim() !== "") {
+            return String(val).trim();
+          }
+        }
+      }
+      return null;
+    }
+
     function getProp(p, keys) {
       for (let key of keys) {
         if (p[key] !== undefined && p[key] !== null && p[key] !== "") {
@@ -416,7 +430,9 @@
 
       data.features.forEach(f => {
         const p = f.properties;
-        const pt = getProp(p, ['PT', 'pt', 'PT_', 'COMPANY', 'company', 'NM_PT', 'nm_pt', 'PERUSAHAAN', 'perusahaan']);
+        
+        // Memanggil fungsi pencarian PT otomatis yang mendukung keyword pt/company
+        const pt = getPTValue(p);
         const est = getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']);
         const afd = getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']);
 
@@ -467,10 +483,8 @@
             document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
             document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
 
-            // Deteksi array produksi bulanan dari berbagai kemungkinan nama field
             let dataBulanan = prop.PROD_BULANAN || prop.prod_bulanan || prop.produksi_bulanan;
             if (!Array.isArray(dataBulanan)) {
-              // Jika di peta disimpan terpisah per kolom bulan (misal: JAN, FEB, MAR, dst.)
               dataBulanan = [
                 Number(getProp(prop, ['JAN', 'jan', 'PROD_01']) || 0),
                 Number(getProp(prop, ['FEB', 'feb', 'PROD_02']) || 0),
@@ -499,16 +513,13 @@
         }
       }).addTo(map);
 
-      // Kalkulasi KPI Total & Rata-rata Berdasarkan Data yang Ditampilkan
       let tLuas = 0, tProd = 0, totalYieldSum = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
         const p = f.properties;
         const l = Number(getProp(p, ['LUAS_HA', 'luas_ha', 'LUAS', 'luas', 'AREA']) || 0);
         
-        // Cari total produksi (bisa dari field total, atau menjumlahkan seluruh bulan)
         let prod = Number(getProp(p, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON']) || 0);
         if (prod === 0) {
-          // Jika field total kosong, jumlahkan dari kolom bulanan
           const bulanList = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','AGU','SEP','OKT','NOV','DES'];
           bulanList.forEach(b => {
             prod += Number(getProp(p, [b, b.toLowerCase(), 'PROD_' + b]) || 0);
@@ -547,7 +558,7 @@
       
       const filteredFeatures = rawGeoJsonData.features.filter(f => {
         const p = f.properties;
-        const pt = String(getProp(p, ['PT', 'pt', 'PT_', 'COMPANY', 'company', 'NM_PT', 'nm_pt', 'PERUSAHAAN', 'perusahaan']) || 'ALL');
+        const pt = String(getPTValue(p) || 'ALL');
         const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
         const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
         const idBlok = String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK']) || '').toLowerCase();
