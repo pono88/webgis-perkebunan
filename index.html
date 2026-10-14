@@ -89,7 +89,7 @@
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
-      <!-- 1. CASCADING FILTER OTOMATIS -->
+      <!-- 1. CASCADING FILTER WILAYAH -->
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
           <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
@@ -114,11 +114,13 @@
         </div>
       </section>
 
-      <!-- 2. SEARCH BLOK -->
+      <!-- 2. DROPDOWN & PENCARIAN NAMA BLOK -->
       <section>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Pilih / Cari Blok</label>
         <div class="relative">
-          <input type="text" id="search-blok" placeholder="Cari Nomor Blok..." class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none">
-          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+          <select id="filter-blok" class="w-full text-xs bg-white border border-gray-300 rounded-lg p-2.5 outline-none">
+            <option value="ALL">-- Semua Blok --</option>
+          </select>
         </div>
       </section>
 
@@ -399,7 +401,17 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
-    // Pencarian otomatis kolom PT / Company
+    // Helper Universal untuk membaca atribut peta secara fleksibel
+    function getProp(p, keys) {
+      for (let key of keys) {
+        if (p[key] !== undefined && p[key] !== null && p[key] !== "") {
+          return p[key];
+        }
+      }
+      return null;
+    }
+
+    // Deteksi otomatis kolom PT / Company
     function getPTValue(properties) {
       for (let key in properties) {
         const lowerKey = key.toLowerCase();
@@ -413,7 +425,7 @@
       return null;
     }
 
-    // Pencarian otomatis kolom Luas / Ha (mengandung kata 'luas' atau 'ha')
+    // Deteksi otomatis kolom Luas / Ha
     function getLuasValue(properties) {
       for (let key in properties) {
         const lowerKey = key.toLowerCase();
@@ -427,42 +439,105 @@
       return 0;
     }
 
-    function getProp(p, keys) {
-      for (let key of keys) {
-        if (p[key] !== undefined && p[key] !== null && p[key] !== "") {
-          return p[key];
-        }
+    // Deteksi otomatis total produksi dari field atau akumulasi bulanan
+    function getProduksiValue(properties) {
+      let prod = Number(getProp(properties, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON', 'TOTAL_PROD']) || 0);
+      if (prod === 0) {
+        const bulanList = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','AGU','SEP','OKT','NOV','DES'];
+        bulanList.forEach(b => {
+          prod += Number(getProp(properties, [b, b.toLowerCase(), 'PROD_' + b]) || 0);
+        });
       }
-      return null;
+      return prod;
     }
 
-    function populateFilterOptions(data) {
+    function populateDropdowns(featuresList) {
       const ptSet = new Set();
       const estSet = new Set();
       const afdSet = new Set();
+      const blokSet = new Set();
 
-      data.features.forEach(f => {
+      featuresList.forEach(f => {
         const p = f.properties;
         const pt = getPTValue(p);
         const est = getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']);
         const afd = getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']);
+        const blok = getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']);
 
         if (pt) ptSet.add(pt);
         if (est) estSet.add(est);
         if (afd) afdSet.add(afd);
+        if (blok) blokSet.add(blok);
       });
 
       const ptSelect = document.getElementById('filter-pt');
       const estSelect = document.getElementById('filter-estate');
       const afdSelect = document.getElementById('filter-afdeling');
+      const blokSelect = document.getElementById('filter-blok');
+
+      const currentPt = ptSelect.value;
+      const currentEst = estSelect.value;
+      const currentAfd = afdSelect.value;
+      const currentBlok = blokSelect.value;
 
       ptSelect.innerHTML = '<option value="ALL">-- Semua PT --</option>';
       estSelect.innerHTML = '<option value="ALL">-- Semua Estate --</option>';
       afdSelect.innerHTML = '<option value="ALL">-- Semua Afdeling --</option>';
+      blokSelect.innerHTML = '<option value="ALL">-- Semua Blok --</option>';
 
       ptSet.forEach(val => ptSelect.innerHTML += `<option value="${val}">${val}</option>`);
       estSet.forEach(val => estSelect.innerHTML += `<option value="${val}">${val}</option>`);
       afdSet.forEach(val => afdSelect.innerHTML += `<option value="${val}">${val}</option>`);
+      blokSet.forEach(val => blokSelect.innerHTML += `<option value="${val}">Blok ${val}</option>`);
+
+      ptSelect.value = ptSet.has(currentPt) ? currentPt : 'ALL';
+      estSelect.value = estSet.has(currentEst) ? currentEst : 'ALL';
+      afdSelect.value = afdSet.has(currentAfd) ? currentAfd : 'ALL';
+      blokSelect.value = blokSet.has(currentBlok) ? currentBlok : 'ALL';
+    }
+
+    function showBlokDetail(prop) {
+      const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '-';
+      const thnTan = getProp(prop, ['TAHUN_TANAM', 'tahun_tanam', 'TAHUN', 'tahun', 'THN_TANAM']) || '-';
+      const luasHa = getLuasValue(prop);
+      const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
+      const totalProd = getProduksiValue(prop);
+      
+      // Rata-rata Yield Blok = Produksi Blok / Luas Blok
+      const yieldTon = luasHa > 0 ? (totalProd / luasHa) : 0;
+
+      document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
+      document.getElementById('detail-tt').innerText = thnTan;
+      document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
+      document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
+      document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
+
+      let dataBulanan = prop.PROD_BULANAN || prop.prod_bulanan || prop.produksi_bulanan;
+      if (!Array.isArray(dataBulanan)) {
+        dataBulanan = [
+          Number(getProp(prop, ['JAN', 'jan', 'PROD_01']) || 0),
+          Number(getProp(prop, ['FEB', 'feb', 'PROD_02']) || 0),
+          Number(getProp(prop, ['MAR', 'mar', 'PROD_03']) || 0),
+          Number(getProp(prop, ['APR', 'apr', 'PROD_04']) || 0),
+          Number(getProp(prop, ['MEI', 'MAY', 'may', 'mei', 'PROD_05']) || 0),
+          Number(getProp(prop, ['JUN', 'jun', 'PROD_06']) || 0),
+          Number(getProp(prop, ['JUL', 'jul', 'PROD_07']) || 0),
+          Number(getProp(prop, ['AGU', 'AUG', 'aug', 'agu', 'PROD_08']) || 0),
+          Number(getProp(prop, ['SEP', 'sep', 'PROD_09']) || 0),
+          Number(getProp(prop, ['OKT', 'OCT', 'oct', 'okt', 'PROD_10']) || 0),
+          Number(getProp(prop, ['NOV', 'nov', 'PROD_11']) || 0),
+          Number(getProp(prop, ['DES', 'DEC', 'dec', 'des', 'PROD_12']) || 0)
+        ];
+      }
+
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
+        type: 'bar',
+        data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: dataBulanan, backgroundColor: '#059669', borderRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      sidebar.classList.remove('-translate-x-full');
     }
 
     function renderMapAndKPI(dataToRender) {
@@ -471,83 +546,43 @@
       geojsonLayer = L.geoJSON(dataToRender, {
         style: f => {
           const p = f.properties;
-          const yieldTon = Number(getProp(p, ['YIELD_TON_HA', 'yield_ton_ha', 'YIELD', 'yield', 'PROD_TON_HA']) || 0);
+          const l = getLuasValue(p);
+          const prod = getProduksiValue(p);
+          const yieldTon = l > 0 ? (prod / l) : 0;
           return { fillColor: getColor(yieldTon), weight: 1.5, color: '#fff', fillOpacity: 0.75 };
         },
         onEachFeature: (f, layer) => {
           const prop = f.properties;
-          const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK']) || '-';
-          const yieldTon = Number(getProp(prop, ['YIELD_TON_HA', 'yield_ton_ha', 'YIELD', 'yield', 'PROD_TON_HA']) || 0);
+          const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '-';
+          const l = getLuasValue(prop);
+          const prod = getProduksiValue(prop);
+          const yieldTon = l > 0 ? (prod / l) : 0;
           
-          layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
+          layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
           
           layer.on('click', (e) => {
             if (isDeleteMode) { e.target.closePopup(); return; }
-
-            const thnTan = getProp(prop, ['TAHUN_TANAM', 'tahun_tanam', 'TAHUN', 'tahun', 'THN_TANAM']) || '-';
-            const luasHa = getLuasValue(prop);
-            const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
-
-            document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
-            document.getElementById('detail-tt').innerText = thnTan;
-            document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
-            document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
-            document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
-
-            let dataBulanan = prop.PROD_BULANAN || prop.prod_bulanan || prop.produksi_bulanan;
-            if (!Array.isArray(dataBulanan)) {
-              dataBulanan = [
-                Number(getProp(prop, ['JAN', 'jan', 'PROD_01']) || 0),
-                Number(getProp(prop, ['FEB', 'feb', 'PROD_02']) || 0),
-                Number(getProp(prop, ['MAR', 'mar', 'PROD_03']) || 0),
-                Number(getProp(prop, ['APR', 'apr', 'PROD_04']) || 0),
-                Number(getProp(prop, ['MEI', 'MAY', 'may', 'mei', 'PROD_05']) || 0),
-                Number(getProp(prop, ['JUN', 'jun', 'PROD_06']) || 0),
-                Number(getProp(prop, ['JUL', 'jul', 'PROD_07']) || 0),
-                Number(getProp(prop, ['AGU', 'AUG', 'aug', 'agu', 'PROD_08']) || 0),
-                Number(getProp(prop, ['SEP', 'sep', 'PROD_09']) || 0),
-                Number(getProp(prop, ['OKT', 'OCT', 'oct', 'okt', 'PROD_10']) || 0),
-                Number(getProp(prop, ['NOV', 'nov', 'PROD_11']) || 0),
-                Number(getProp(prop, ['DES', 'DEC', 'dec', 'des', 'PROD_12']) || 0)
-              ];
-            }
-
-            if (chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
-              type: 'bar',
-              data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: dataBulanan, backgroundColor: '#059669', borderRadius: 4 }] },
-              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-            });
-
-            sidebar.classList.remove('-translate-x-full');
+            showBlokDetail(prop);
           });
         }
       }).addTo(map);
 
-      let tLuas = 0, tProd = 0, totalYieldSum = 0, totalSphSum = 0, count = 0;
+      // Kalkulasi KPI Total & Rata-rata Yield = Total Produksi / Total Luas
+      let tLuas = 0, tProd = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
         const p = f.properties;
         const l = getLuasValue(p);
-        
-        let prod = Number(getProp(p, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON']) || 0);
-        if (prod === 0) {
-          const bulanList = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','AGU','SEP','OKT','NOV','DES'];
-          bulanList.forEach(b => {
-            prod += Number(getProp(p, [b, b.toLowerCase(), 'PROD_' + b]) || 0);
-          });
-        }
-
-        const yld = Number(getProp(p, ['YIELD_TON_HA', 'yield_ton_ha', 'YIELD', 'yield']) || 0);
+        const prod = getProduksiValue(p);
         const sph = Number(getProp(p, ['SPH', 'sph', 'POKOK_HA']) || 0);
 
         tLuas += l;
         tProd += prod;
-        totalYieldSum += yld;
         totalSphSum += sph;
         count++;
       });
 
-      const avgYield = count > 0 ? (totalYieldSum / count) : 0;
+      // Rata-rata Yield Wilayah = Total Produksi / Total Luas
+      const avgYield = tLuas > 0 ? (tProd / tLuas) : 0;
       const avgSph = count > 0 ? Math.round(totalSphSum / count) : 0;
 
       document.getElementById('kpi-produksi').innerText = `${tProd.toFixed(1)} Ton`;
@@ -557,7 +592,7 @@
     }
 
     // =========================================================
-    // 5. FILTER LOGIC
+    // 5. FILTER LOGIC (CASCADING & PENCARIAN BLOK)
     // =========================================================
     function applyFilter() {
       if (!rawGeoJsonData) return;
@@ -565,30 +600,57 @@
       const ptVal = document.getElementById('filter-pt').value;
       const estVal = document.getElementById('filter-estate').value;
       const afdVal = document.getElementById('filter-afdeling').value;
-      const searchVal = document.getElementById('search-blok').value.toLowerCase();
+      const blokVal = document.getElementById('filter-blok').value;
       
       const filteredFeatures = rawGeoJsonData.features.filter(f => {
         const p = f.properties;
         const pt = String(getPTValue(p) || 'ALL');
         const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
         const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
-        const idBlok = String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK']) || '').toLowerCase();
+        const idBlok = String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '');
 
         const matchPt = (ptVal === 'ALL' || pt === ptVal);
         const matchEst = (estVal === 'ALL' || est === estVal);
         const matchAfd = (afdVal === 'ALL' || afd === afdVal);
-        const matchSearch = (searchVal === '' || idBlok.includes(searchVal));
+        const matchBlok = (blokVal === 'ALL' || idBlok === blokVal);
 
-        return matchPt && matchEst && matchAfd && matchSearch;
+        return matchPt && matchEst && matchAfd && matchBlok;
       });
 
+      // Perbarui opsi dropdown blok agar menyesuaikan data yang terfilter di PT/Estate/Afdeling
+      populateDropdowns(rawGeoJsonData.features.filter(f => {
+        const p = f.properties;
+        const pt = String(getPTValue(p) || 'ALL');
+        const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
+        const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
+        return (ptVal === 'ALL' || pt === ptVal) && 
+               (estVal === 'ALL' || est === estVal) && 
+               (afdVal === 'ALL' || afd === afdVal);
+      }));
+
+      // Kembalikan pilihan blok jika masih valid
+      document.getElementById('filter-blok').value = blokVal;
+
       renderMapAndKPI({ type: "FeatureCollection", features: filteredFeatures });
+
+      // Jika user memilih spesifik 1 blok, langsung tampilkan detail & zoom ke blok tersebut
+      if (blokVal !== 'ALL' && filteredFeatures.length === 1) {
+        showBlokDetail(filteredFeatures[0].properties);
+        if (geojsonLayer) {
+          geojsonLayer.eachLayer(layer => {
+            const bId = getProp(layer.feature.properties, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']);
+            if (bId === blokVal) {
+              map.fitBounds(layer.getBounds(), { maxZoom: 16 });
+              layer.openPopup();
+            }
+          });
+        }
+      }
     }
     
-    ['filter-pt', 'filter-estate', 'filter-afdeling'].forEach(id => {
+    ['filter-pt', 'filter-estate', 'filter-afdeling', 'filter-blok'].forEach(id => {
       document.getElementById(id).addEventListener('change', applyFilter);
     });
-    document.getElementById('search-blok').addEventListener('input', applyFilter);
 
     // =========================================================
     // 6. MEMANGGIL FILE GEOJSON EKSTERNAL (test.json)
@@ -600,7 +662,7 @@
       })
       .then(data => {
         rawGeoJsonData = data; 
-        populateFilterOptions(rawGeoJsonData); 
+        populateDropdowns(rawGeoJsonData.features); 
         renderMapAndKPI(rawGeoJsonData);      
         
         if (geojsonLayer && geojsonLayer.getBounds().isValid()) {
