@@ -95,7 +95,7 @@
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
-      <!-- 1. CASCADING FILTER -->
+      <!-- 1. CASCADING FILTER OTOMATIS DARI DATA PETA -->
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
           <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
@@ -104,24 +104,18 @@
           <label class="block text-xs font-medium text-gray-600 mb-1">Perusahaan (PT)</label>
           <select id="filter-pt" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
             <option value="ALL">-- Semua PT --</option>
-            <option value="PT_DHARMA_AGRO">PT Dharma Agronomy</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Estate</label>
           <select id="filter-estate" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
             <option value="ALL">-- Semua Estate --</option>
-            <option value="ESTATE_ALPHA">Estate Alpha</option>
-            <option value="ESTATE_BETA">Estate Beta</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Afdeling</label>
           <select id="filter-afdeling" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
             <option value="ALL">-- Semua Afdeling --</option>
-            <option value="AFD_1">Afdeling I</option>
-            <option value="AFD_2">Afdeling II</option>
-            <option value="AFD_3">Afdeling III</option>
           </select>
         </div>
       </section>
@@ -231,16 +225,14 @@
     } catch (error) { console.error("Gagal memuat plugin pengukur jarak", error); }
 
     // =========================================================
-    // 3. FITUR GPS LAPANGAN (ZOOM, TRACKING, POINT, EDIT, EXPORT, & CLEAR)
+    // 3. FITUR GPS LAPANGAN (ZOOM, TRACKING, POINT, EDIT, EXPORT)
     // =========================================================
     let userMarker = null, accuracyCircle = null;
     let isTracking = false;
     let isFirstLocation = true; 
     let isDeleteMode = false;
     
-    // Group khusus untuk layer lapangan (agar bisa di-export/dihapus)
     const drawnFieldItems = L.featureGroup().addTo(map);
-    
     let currentTrackLine = null;
     let currentTrackCoords = [];
 
@@ -254,7 +246,6 @@
     const btnTrack = document.getElementById('btn-track');
     const trackIcon = document.getElementById('track-icon');
 
-    // A. Leaflet Event - Ketika koordinat lokasi didapatkan atau diperbarui
     map.on('locationfound', function (e) {
       if (!userMarker) {
         userMarker = L.marker(e.latlng, { icon: userGpsIcon }).addTo(map);
@@ -265,7 +256,6 @@
         accuracyCircle.setRadius(e.accuracy);
       }
       
-      // Jika mode rekaman hidup, perbarui garis & auto-center
       if (isTracking) {
         currentTrackCoords.push(e.latlng);
         if (!currentTrackLine) {
@@ -285,11 +275,10 @@
     });
 
     map.on('locationerror', function (e) {
-      alert("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi (Location/GPS) diaktifkan.");
+      alert("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi diaktifkan.");
       if (isTracking) stopTracking();
     });
 
-    // B. ZOOM: Cari dan Zoom ke Lokasi Saat Ini (Tanpa Tracking)
     btnLocation.addEventListener('click', () => {
       if (isTracking && userMarker) {
         map.flyTo(userMarker.getLatLng(), 17);
@@ -298,66 +287,45 @@
       }
     });
 
-    // C. TRACKING: Fungsi Menghentikan Tracking
     function stopTracking() {
       map.stopLocate();
       currentTrackLine = null; 
       currentTrackCoords = []; 
       isTracking = false;
-      
       btnTrack.classList.remove('text-red-600', 'bg-red-50');
       trackIcon.className = 'fa-solid fa-route text-lg';
-      btnTrack.title = "Mulai Rekam Jejak (Tracking)";
     }
 
-    // D. TRACKING: Mulai/Berhenti Merekam
     btnTrack.addEventListener('click', function () {
       if (!isTracking) {
         isTracking = true;
         isFirstLocation = true;
         map.locate({ setView: false, watch: true, enableHighAccuracy: true });
-        
         this.classList.add('text-red-600', 'bg-red-50');
         trackIcon.className = 'fa-solid fa-stop text-lg';
-        this.title = "Hentikan Tracking";
       } else {
         stopTracking();
       }
     });
 
-    // E. POINT: Tambah Titik Lapangan + Fungsi Edit Nama Langsung
     document.getElementById('btn-add-point').addEventListener('click', () => {
-      let pinLocation;
-      if (userMarker) {
-        pinLocation = userMarker.getLatLng();
-      } else {
-        pinLocation = map.getCenter();
-        alert("GPS belum ditemukan. Titik diletakkan di tengah layar peta saat ini.");
-      }
-
+      let pinLocation = userMarker ? userMarker.getLatLng() : map.getCenter();
       const pointName = prompt("Masukkan nama/keterangan untuk titik ini:", "Area Peninjauan");
       if (pointName !== null && pointName.trim() !== "") {
         createPointMarker(pinLocation, pointName.trim());
       }
     });
 
-    // Fungsi helper untuk merender marker titik ke peta dengan popup interaktif (Termasuk tombol Edit)
     function createPointMarker(latlng, name) {
       const marker = L.marker(latlng);
-      
-      // Simpan properti nama
       marker.feature = { type: "Feature", properties: { Keterangan: name } };
-
-      // Buat isi HTML popup dengan tombol "Edit Nama"
       updateMarkerPopup(marker);
-
       drawnFieldItems.addLayer(marker);
       marker.openPopup();
     }
 
     function updateMarkerPopup(marker) {
       const currentName = marker.feature.properties.Keterangan;
-      
       const popupContent = `
         <div style="font-size: 12px; text-align: center;">
           <b>${currentName}</b><br><br>
@@ -369,45 +337,34 @@
       marker.bindPopup(popupContent);
     }
 
-    // Fungsi global untuk merespon klik tombol Edit Nama di dalam Popup
     window.editMarkerName = function(markerId) {
-      // Cari marker berdasarkan internal Leaflet ID (stamp)
       drawnFieldItems.eachLayer(layer => {
         if (L.stamp(layer) === parseInt(markerId)) {
           const oldName = layer.feature.properties.Keterangan;
           const newName = prompt("Masukkan nama/keterangan baru untuk titik ini:", oldName);
-          
           if (newName !== null && newName.trim() !== "") {
             layer.feature.properties.Keterangan = newName.trim();
             updateMarkerPopup(layer);
-            layer.openPopup(); // Refresh popup
+            layer.openPopup();
           }
         }
       });
     };
 
-    // F. EXPORT: Unduh GeoJSON
     document.getElementById('btn-export').addEventListener('click', () => {
       const geojsonData = drawnFieldItems.toGeoJSON();
-      
       if (geojsonData.features.length === 0) {
         alert("Belum ada rute atau titik lapangan yang direkam untuk diexport.");
         return;
       }
-
       const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      
-      a.href = url;
-      a.download = "Data_Lapangan_WebGIS.geojson";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = url; a.download = "Data_Lapangan_WebGIS.geojson";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
 
-    // G. DELETE MODE: Hapus Selektif
     const btnClearLayers = document.getElementById('btn-clear-layers');
     const mapContainer = document.getElementById('map');
 
@@ -416,19 +373,15 @@
         alert("Belum ada jejak rute atau titik yang bisa dihapus.");
         return;
       }
-      
       isDeleteMode = !isDeleteMode; 
-      
       if (isDeleteMode) {
         btnClearLayers.classList.remove('bg-white', 'text-gray-700', 'hover:text-red-500');
         btnClearLayers.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600');
-        btnClearLayers.title = "Matikan Mode Hapus";
         mapContainer.style.cursor = 'crosshair'; 
-        alert("MODE PENGHAPUS AKTIF:\nKlik pada garis merah atau titik pin di peta yang ingin Anda hapus.\n\nKlik kembali ikon Penghapus untuk menonaktifkannya.");
+        alert("MODE PENGHAPUS AKTIF:\nKlik pada garis merah atau titik pin di peta yang ingin Anda hapus.");
       } else {
         btnClearLayers.classList.add('bg-white', 'text-gray-700', 'hover:text-red-500');
         btnClearLayers.classList.remove('bg-red-500', 'text-white', 'hover:bg-red-600');
-        btnClearLayers.title = "Aktifkan Mode Hapus (Pilih Titik/Rute)";
         mapContainer.style.cursor = ''; 
       }
     });
@@ -438,43 +391,68 @@
         if (e.layer.closePopup) e.layer.closePopup(); 
         if (confirm("Hapus rute/titik ini dari peta?")) {
           drawnFieldItems.removeLayer(e.layer);
-          if (e.layer === currentTrackLine) {
-            currentTrackLine = null;
-            currentTrackCoords = [];
-          }
+          if (e.layer === currentTrackLine) { currentTrackLine = null; currentTrackCoords = []; }
         }
       }
     });
 
     // =========================================================
-    // 4. DATA GEOJSON (POLIGON KEBUN)
+    // 4. DATA GEOJSON & PENGISIAN FILTER OTOMATIS DARI test.json
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
-    let dataPerkebunanGeoJSON = null;
+    let rawGeoJsonData = null; // Menyimpan data asli dari file
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
-    function loadGeoJSON(data) {
+    // Fungsi untuk mengisi pilihan dropdown filter secara otomatis berdasarkan data JSON
+    function populateFilterOptions(data) {
+      const ptSet = new Set();
+      const estSet = new Set();
+      const afdSet = new Set();
+
+      data.features.forEach(f => {
+        const p = f.properties;
+        const pt = p.PT || p.pt || p.COMPANY || p.company;
+        const est = p.ESTATE || p.estate;
+        const afd = p.AFDELING || p.afdeling || p.AFD || p.afd;
+
+        if (pt) ptSet.add(pt);
+        if (est) estSet.add(est);
+        if (afd) afdSet.add(afd);
+      });
+
+      const ptSelect = document.getElementById('filter-pt');
+      const estSelect = document.getElementById('filter-estate');
+      const afdSelect = document.getElementById('filter-afdeling');
+
+      // Kosongkan opsi lama kecuali default "-- Semua --"
+      ptSelect.innerHTML = '<option value="ALL">-- Semua PT --</option>';
+      estSelect.innerHTML = '<option value="ALL">-- Semua Estate --</option>';
+      afdSelect.innerHTML = '<option value="ALL">-- Semua Afdeling --</option>';
+
+      ptSet.forEach(val => ptSelect.innerHTML += `<option value="${val}">${val}</option>`);
+      estSet.forEach(val => estSelect.innerHTML += `<option value="${val}">${val}</option>`);
+      afdSet.forEach(val => afdSelect.innerHTML += `<option value="${val}">${val}</option>`);
+    }
+
+    function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
       
-      geojsonLayer = L.geoJSON(data, {
+      geojsonLayer = L.geoJSON(dataToRender, {
         style: f => ({ 
-          fillColor: getColor(f.properties.YIELD_TON_HA || 0), 
+          fillColor: getColor(f.properties.YIELD_TON_HA || f.properties.yield || 0), 
           weight: 1.5, color: '#fff', fillOpacity: 0.75 
         }),
         onEachFeature: (f, layer) => {
           const prop = f.properties;
-          const idBlok = prop.ID_BLOK || prop.id_blok || prop.Name || '-';
-          const yieldTon = prop.YIELD_TON_HA || prop.yield_ton || 0;
+          const idBlok = prop.ID_BLOK || prop.id_blok || prop.Name || prop.BLOK || '-';
+          const yieldTon = prop.YIELD_TON_HA || prop.yield || 0;
           
           layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
           
           layer.on('click', (e) => {
-            if (isDeleteMode) {
-              e.target.closePopup();
-              return;
-            }
+            if (isDeleteMode) { e.target.closePopup(); return; }
 
             document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
             document.getElementById('detail-tt').innerText = prop.TAHUN_TANAM || prop.tahun || '-';
@@ -482,7 +460,7 @@
             document.getElementById('detail-sph').innerText = `${prop.SPH || prop.sph || 0} Pkk/Ha`;
             document.getElementById('detail-yield').innerText = `${yieldTon} Ton/Ha`;
 
-            const dataBulanan = prop.PROD_BULANAN || [0,0,0,0,0,0,0,0,0,0,0,0];
+            const dataBulanan = prop.PROD_BULANAN || prop.produksi_bulanan || [0,0,0,0,0,0,0,0,0,0,0,0];
 
             if (chartInstance) chartInstance.destroy();
             chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
@@ -496,49 +474,54 @@
         }
       }).addTo(map);
 
-      let tLuas = 0, tProd = 0, count = 0;
-      data.features.forEach(f => { 
-        tLuas += (f.properties.LUAS_HA || f.properties.luas || 0); 
-        tProd += (f.properties.PROD_TOTAL_TON || f.properties.prod_ton || 0); 
-        count++; 
+      // Hitung ulang nilai KPI dari fitur yang sedang tampil
+      let tLuas = 0, tProd = 0, totalSph = 0, count = 0;
+      dataToRender.features.forEach(f => {
+        const p = f.properties;
+        tLuas += Number(p.LUAS_HA || p.luas || 0);
+        tProd += Number(p.PROD_TOTAL_TON || p.produksi_total || 0);
+        totalSph += Number(p.SPH || p.sph || 0);
+        count++;
       });
-      
+
       document.getElementById('kpi-produksi').innerText = tProd > 0 ? `${tProd.toFixed(1)} Ton` : '0 Ton';
       document.getElementById('kpi-luas').innerText = tLuas > 0 ? `${tLuas.toFixed(1)} Ha` : '0 Ha';
       document.getElementById('kpi-yield').innerText = tLuas > 0 ? `${(tProd/tLuas).toFixed(2)} Ton/Ha` : '0 Ton/Ha';
-      document.getElementById('kpi-sph').innerText = count > 0 ? '132 Pkk/Ha' : '0 Pkk/Ha';
-
-      if (geojsonLayer.getBounds().isValid()) {
-        map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
-      }
+      document.getElementById('kpi-sph').innerText = count > 0 ? `${Math.round(totalSph/count)} Pkk/Ha` : '0 Pkk/Ha';
     }
 
     // =========================================================
-    // 5. FILTER LOGIC
+    // 5. FILTER LOGIC & PENCARIAN BERDASARKAN ATRIBUT DATA
     // =========================================================
     function applyFilter() {
-      if (!dataPerkebunanGeoJSON) return;
+      if (!rawGeoJsonData) return;
 
-      const pt = document.getElementById('filter-pt').value;
-      const est = document.getElementById('filter-estate').value;
-      const afd = document.getElementById('filter-afdeling').value;
-      const src = document.getElementById('search-blok').value.toLowerCase();
+      const ptVal = document.getElementById('filter-pt').value;
+      const estVal = document.getElementById('filter-estate').value;
+      const afdVal = document.getElementById('filter-afdeling').value;
+      const searchVal = document.getElementById('search-blok').value.toLowerCase();
       
-      loadGeoJSON({ type: "FeatureCollection", features: dataPerkebunanGeoJSON.features.filter(f => {
-        const prop = f.properties;
-        const idBlok = prop.ID_BLOK || prop.id_blok || prop.Name || '';
-        const ptData = prop.PT || prop.pt || 'ALL';
-        const estData = prop.ESTATE || prop.estate || 'ALL';
-        const afdData = prop.AFDELING || prop.afdeling || 'ALL';
+      const filteredFeatures = rawGeoJsonData.features.filter(f => {
+        const p = f.properties;
+        const pt = String(p.PT || p.pt || p.COMPANY || p.company || 'ALL');
+        const est = String(p.ESTATE || p.estate || 'ALL');
+        const afd = String(p.AFDELING || p.afdeling || p.AFD || p.afd || 'ALL');
+        const idBlok = String(p.ID_BLOK || p.id_blok || p.Name || p.BLOK || '').toLowerCase();
 
-        return (pt === 'ALL' || ptData === pt) && 
-               (est === 'ALL' || estData === est) && 
-               (afd === 'ALL' || afdData === afd) && 
-               (src === '' || idBlok.toLowerCase().includes(src))
-      })});
+        const matchPt = (ptVal === 'ALL' || pt === ptVal);
+        const matchEst = (estVal === 'ALL' || est === estVal);
+        const matchAfd = (afdVal === 'ALL' || afd === afdVal);
+        const matchSearch = (searchVal === '' || idBlok.includes(searchVal));
+
+        return matchPt && matchEst && matchAfd && matchSearch;
+      });
+
+      renderMapAndKPI({ type: "FeatureCollection", features: filteredFeatures });
     }
     
-    ['filter-pt', 'filter-estate', 'filter-afdeling'].forEach(id => document.getElementById(id).addEventListener('change', applyFilter));
+    ['filter-pt', 'filter-estate', 'filter-afdeling'].forEach(id => {
+      document.getElementById(id).addEventListener('change', applyFilter);
+    });
     document.getElementById('search-blok').addEventListener('input', applyFilter);
 
     // =========================================================
@@ -546,16 +529,21 @@
     // =========================================================
     fetch('test.json')
       .then(response => {
-        if (!response.ok) throw new Error("File tidak ditemukan atau terjadi kesalahan jaringan.");
+        if (!response.ok) throw new Error("File test.json tidak ditemukan.");
         return response.json();
       })
       .then(data => {
-        dataPerkebunanGeoJSON = data; 
-        loadGeoJSON(dataPerkebunanGeoJSON); 
+        rawGeoJsonData = data; 
+        populateFilterOptions(rawGeoJsonData); // Mengisi dropdown sidebar otomatis
+        renderMapAndKPI(rawGeoJsonData);      // Tampilkan peta & hitung KPI awal
+        
+        if (geojsonLayer && geojsonLayer.getBounds().isValid()) {
+          map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+        }
       })
       .catch(error => {
         console.error("Gagal memuat poligon:", error);
-        alert("PERHATIAN: Gagal memuat file test.json.\n\nPastikan file 'test.json' sudah diunggah sejajar dengan index.html di GitHub.");
+        alert("PERHATIAN: Gagal memuat file test.json.\nPastikan file 'test.json' sudah diunggah ke repository GitHub Anda.");
       });
   </script>
 </body>
