@@ -231,7 +231,7 @@
     } catch (error) { console.error("Gagal memuat plugin pengukur jarak", error); }
 
     // =========================================================
-    // 3. FITUR GPS LAPANGAN (ZOOM, TRACKING, POINT, EXPORT, & CLEAR)
+    // 3. FITUR GPS LAPANGAN (ZOOM, TRACKING, POINT, EDIT, EXPORT, & CLEAR)
     // =========================================================
     let userMarker = null, accuracyCircle = null;
     let isTracking = false;
@@ -265,7 +265,7 @@
         accuracyCircle.setRadius(e.accuracy);
       }
       
-      // Jika mode rekaman hidup, buat/perbarui garis merah & selalu pan to posisi kita
+      // Jika mode rekaman hidup, perbarui garis & auto-center
       if (isTracking) {
         currentTrackCoords.push(e.latlng);
         if (!currentTrackLine) {
@@ -275,12 +275,11 @@
           currentTrackLine.setLatLngs(currentTrackCoords);
         }
         
-        // Peta akan SELALU MENGKUTI/MENGUNCI posisi kita
         if (isFirstLocation) { 
           map.flyTo(e.latlng, 17); 
           isFirstLocation = false; 
         } else {
-          map.panTo(e.latlng); // <-- Fitur agar layar terus bergeser mengikuti Anda
+          map.panTo(e.latlng); 
         }
       }
     });
@@ -316,7 +315,6 @@
       if (!isTracking) {
         isTracking = true;
         isFirstLocation = true;
-        // watch: true = Terus memantau perubahan koordinat saat berjalan
         map.locate({ setView: false, watch: true, enableHighAccuracy: true });
         
         this.classList.add('text-red-600', 'bg-red-50');
@@ -327,24 +325,66 @@
       }
     });
 
-    // E. POINT: Tambah Titik Lapangan
+    // E. POINT: Tambah Titik Lapangan + Fungsi Edit Nama Langsung
     document.getElementById('btn-add-point').addEventListener('click', () => {
       let pinLocation;
       if (userMarker) {
-        pinLocation = userMarker.getLatLng(); // Pakai GPS kalau ada
+        pinLocation = userMarker.getLatLng();
       } else {
-        pinLocation = map.getCenter(); // Pakai tengah layar kalau belum nyalakan GPS
+        pinLocation = map.getCenter();
         alert("GPS belum ditemukan. Titik diletakkan di tengah layar peta saat ini.");
       }
 
       const pointName = prompt("Masukkan nama/keterangan untuk titik ini:", "Area Peninjauan");
       if (pointName !== null && pointName.trim() !== "") {
-        const marker = L.marker(pinLocation).bindPopup(`<b>${pointName}</b>`);
-        marker.feature = { type: "Feature", properties: { Keterangan: pointName } };
-        drawnFieldItems.addLayer(marker);
-        marker.openPopup();
+        createPointMarker(pinLocation, pointName.trim());
       }
     });
+
+    // Fungsi helper untuk merender marker titik ke peta dengan popup interaktif (Termasuk tombol Edit)
+    function createPointMarker(latlng, name) {
+      const marker = L.marker(latlng);
+      
+      // Simpan properti nama
+      marker.feature = { type: "Feature", properties: { Keterangan: name } };
+
+      // Buat isi HTML popup dengan tombol "Edit Nama"
+      updateMarkerPopup(marker);
+
+      drawnFieldItems.addLayer(marker);
+      marker.openPopup();
+    }
+
+    function updateMarkerPopup(marker) {
+      const currentName = marker.feature.properties.Keterangan;
+      
+      const popupContent = `
+        <div style="font-size: 12px; text-align: center;">
+          <b>${currentName}</b><br><br>
+          <button onclick="editMarkerName('${L.stamp(marker)}')" style="background-color: #059669; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">
+            <i class="fa-solid fa-pen-to-square"></i> Edit Nama
+          </button>
+        </div>
+      `;
+      marker.bindPopup(popupContent);
+    }
+
+    // Fungsi global untuk merespon klik tombol Edit Nama di dalam Popup
+    window.editMarkerName = function(markerId) {
+      // Cari marker berdasarkan internal Leaflet ID (stamp)
+      drawnFieldItems.eachLayer(layer => {
+        if (L.stamp(layer) === parseInt(markerId)) {
+          const oldName = layer.feature.properties.Keterangan;
+          const newName = prompt("Masukkan nama/keterangan baru untuk titik ini:", oldName);
+          
+          if (newName !== null && newName.trim() !== "") {
+            layer.feature.properties.Keterangan = newName.trim();
+            updateMarkerPopup(layer);
+            layer.openPopup(); // Refresh popup
+          }
+        }
+      });
+    };
 
     // F. EXPORT: Unduh GeoJSON
     document.getElementById('btn-export').addEventListener('click', () => {
@@ -377,13 +417,13 @@
         return;
       }
       
-      isDeleteMode = !isDeleteMode; // Toggle hidup/mati
+      isDeleteMode = !isDeleteMode; 
       
       if (isDeleteMode) {
         btnClearLayers.classList.remove('bg-white', 'text-gray-700', 'hover:text-red-500');
         btnClearLayers.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600');
         btnClearLayers.title = "Matikan Mode Hapus";
-        mapContainer.style.cursor = 'crosshair'; // Ubah kursor jadi silang bidik
+        mapContainer.style.cursor = 'crosshair'; 
         alert("MODE PENGHAPUS AKTIF:\nKlik pada garis merah atau titik pin di peta yang ingin Anda hapus.\n\nKlik kembali ikon Penghapus untuk menonaktifkannya.");
       } else {
         btnClearLayers.classList.add('bg-white', 'text-gray-700', 'hover:text-red-500');
@@ -398,7 +438,6 @@
         if (e.layer.closePopup) e.layer.closePopup(); 
         if (confirm("Hapus rute/titik ini dari peta?")) {
           drawnFieldItems.removeLayer(e.layer);
-          // Cegah sambungan garis aneh jika yang dihapus adalah garis yang sedang direkam
           if (e.layer === currentTrackLine) {
             currentTrackLine = null;
             currentTrackCoords = [];
@@ -432,7 +471,6 @@
           layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
           
           layer.on('click', (e) => {
-            // Cegah interaksi popup jika sedang Mode Hapus
             if (isDeleteMode) {
               e.target.closePopup();
               return;
