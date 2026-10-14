@@ -33,17 +33,25 @@
     .pulse-animation { animation: pulse 2s infinite; }
   </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col md:flex-row overflow-hidden font-sans relative">
+<body class="bg-gray-100 h-screen w-full overflow-hidden font-sans relative">
 
-  <!-- Tombol GPS -->
-  <button id="btn-gps" class="absolute top-24 right-3 z-[1000] bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Lacak Posisi GPS Saya">
+  <!-- ========================================================= -->
+  <!-- TOMBOL MELAYANG (MENU & GPS)                              -->
+  <!-- ========================================================= -->
+  <!-- Tombol Hamburger (Menu) di Kiri Atas -->
+  <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Buka Menu">
+    <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
+  </button>
+
+  <!-- Tombol GPS di Kanan -->
+  <button id="btn-gps" class="absolute top-32 right-3 z-[1000] bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Lacak Posisi GPS Saya">
     <i class="fa-solid fa-location-crosshairs text-lg"></i>
   </button>
 
   <!-- ========================================================= -->
-  <!-- SIDEBAR (PANEL KIRI)                                      -->
+  <!-- SIDEBAR (PANEL SLIDE DARI KIRI)                           -->
   <!-- ========================================================= -->
-  <aside class="w-full md:w-96 bg-white shadow-xl z-20 flex flex-col h-full border-r border-gray-200">
+  <aside id="sidebar" class="fixed top-0 left-0 z-[3000] h-full w-80 md:w-96 bg-white shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-r border-gray-200">
     <div class="p-4 bg-emerald-800 text-white flex items-center justify-between">
       <div>
         <h1 class="font-bold text-base flex items-center gap-2">
@@ -51,7 +59,10 @@
         </h1>
         <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
       </div>
-      <span class="bg-emerald-900 text-emerald-300 text-[10px] font-semibold px-2 py-1 rounded">v2.1</span>
+      <!-- Tombol Tutup (X) -->
+      <button id="btn-close-sidebar" class="text-white hover:text-emerald-300 transition-colors p-1" title="Tutup Menu">
+        <i class="fa-solid fa-xmark text-2xl"></i>
+      </button>
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
@@ -140,42 +151,58 @@
   </aside>
 
   <!-- ========================================================= -->
-  <!-- AREA MAPS (PANEL KANAN)                                   -->
+  <!-- AREA MAPS (FULL SCREEN)                                   -->
   <!-- ========================================================= -->
-  <main class="flex-1 h-full relative z-10">
-    <div id="map" class="absolute inset-0 w-full h-full"></div>
+  <main class="absolute inset-0 w-full h-full z-10">
+    <div id="map" class="w-full h-full"></div>
   </main>
 
   <!-- ========================================================= -->
   <!-- JAVASCRIPT LIBRARIES                                      -->
   <!-- ========================================================= -->
-  <!-- 1. Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- 2. Leaflet Measure JS -->
   <script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.js"></script>
-  <!-- 3. Chart JS -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- LOGIKA WEBGIS JAVASCRIPT -->
   <script>
     // =========================================================
+    // 0. LOGIKA TOGGLE MENU (SIDEBAR)
+    // =========================================================
+    const sidebar = document.getElementById('sidebar');
+    const btnToggle = document.getElementById('btn-sidebar-toggle');
+    const btnClose = document.getElementById('btn-close-sidebar');
+
+    btnToggle.addEventListener('click', () => {
+      sidebar.classList.remove('-translate-x-full'); // Munculkan menu
+    });
+
+    btnClose.addEventListener('click', () => {
+      sidebar.classList.add('-translate-x-full'); // Sembunyikan menu
+    });
+
+    // =========================================================
     // 1. INISIALISASI PETA & BASEMAP
     // =========================================================
-    // Koordinat default (akan di-override saat GeoJSON dimuat)
-    const map = L.map('map').setView([-2.21, 113.92], 13);
+    // Matikan zoomControl default agar kita bisa atur posisinya ke kanan bawah
+    const map = L.map('map', { zoomControl: false }).setView([-2.21, 113.92], 13);
+    
+    // Tambahkan Zoom Control di Kanan Bawah agar tidak menabrak tombol menu
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
     const esriSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
     
     L.control.layers({ "Satelit (Esri)": esriSatelit, "OpenStreetMap": osm }, null, { position: 'topright' }).addTo(map);
-    map.addLayer(esriSatelit); // Jadikan satelit sebagai default
+    map.addLayer(esriSatelit); // Satelit sebagai default
 
     // =========================================================
     // 2. FITUR PENGUKURAN Jarak & Luas
     // =========================================================
     try {
       const measureControl = new L.Control.Measure({
-        position: 'topleft', primaryLengthUnit: 'meters', secondaryLengthUnit: 'kilometers',
+        position: 'topright', // Dipindah ke kanan atas di bawah Layer Control
+        primaryLengthUnit: 'meters', secondaryLengthUnit: 'kilometers',
         primaryAreaUnit: 'hectares', secondaryAreaUnit: 'sqmeters',
         activeColor: '#059669', completedColor: '#047857'
       });
@@ -227,16 +254,14 @@
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
-    let dataPerkebunanGeoJSON = null; // Variabel kosong untuk menampung data asli
+    let dataPerkebunanGeoJSON = null;
 
-    // Pewarnaan tematik berdasarkan Yield
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
     function loadGeoJSON(data) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
       
       geojsonLayer = L.geoJSON(data, {
-        // Fallback: Jika YIELD_TON_HA tidak ada, asumsikan nilainya 0
         style: f => ({ 
           fillColor: getColor(f.properties.YIELD_TON_HA || 0), 
           weight: 1.5, color: '#fff', fillOpacity: 0.75 
@@ -248,7 +273,6 @@
           
           layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
           
-          // Aksi ketika Blok diklik (Update sidebar panel)
           layer.on('click', () => {
             document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
             document.getElementById('detail-tt').innerText = prop.TAHUN_TANAM || prop.tahun || '-';
@@ -256,7 +280,6 @@
             document.getElementById('detail-sph').innerText = `${prop.SPH || prop.sph || 0} Pkk/Ha`;
             document.getElementById('detail-yield').innerText = `${yieldTon} Ton/Ha`;
 
-            // Data grafik bulanan (Jika tidak ada di ArcMap, gunakan array kosong)
             const dataBulanan = prop.PROD_BULANAN || [0,0,0,0,0,0,0,0,0,0,0,0];
 
             if (chartInstance) chartInstance.destroy();
@@ -265,11 +288,13 @@
               data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: dataBulanan, backgroundColor: '#059669', borderRadius: 4 }] },
               options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
+
+            // Buka sidebar otomatis jika data diklik (Berguna saat layar HP)
+            sidebar.classList.remove('-translate-x-full');
           });
         }
       }).addTo(map);
 
-      // Kalkulasi KPI
       let tLuas = 0, tProd = 0, count = 0;
       data.features.forEach(f => { 
         tLuas += (f.properties.LUAS_HA || f.properties.luas || 0); 
@@ -282,7 +307,6 @@
       document.getElementById('kpi-yield').innerText = tLuas > 0 ? `${(tProd/tLuas).toFixed(2)} Ton/Ha` : '0 Ton/Ha';
       document.getElementById('kpi-sph').innerText = count > 0 ? '132 Pkk/Ha' : '0 Pkk/Ha';
 
-      // Auto zoom ke data poligon yang baru dimuat
       if (geojsonLayer.getBounds().isValid()) {
         map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
       }
@@ -292,7 +316,7 @@
     // 5. FILTER LOGIC
     // =========================================================
     function applyFilter() {
-      if (!dataPerkebunanGeoJSON) return; // Mencegah error jika data belum selesai di-download
+      if (!dataPerkebunanGeoJSON) return;
 
       const pt = document.getElementById('filter-pt').value;
       const est = document.getElementById('filter-estate').value;
@@ -321,18 +345,16 @@
     // =========================================================
     fetch('test.json')
       .then(response => {
-        if (!response.ok) {
-          throw new Error("File tidak ditemukan atau terjadi kesalahan jaringan.");
-        }
+        if (!response.ok) throw new Error("File tidak ditemukan atau terjadi kesalahan jaringan.");
         return response.json();
       })
       .then(data => {
-        dataPerkebunanGeoJSON = data; // Simpan data ke variabel global
-        loadGeoJSON(dataPerkebunanGeoJSON); // Eksekusi load ke peta
+        dataPerkebunanGeoJSON = data; 
+        loadGeoJSON(dataPerkebunanGeoJSON); 
       })
       .catch(error => {
         console.error("Gagal memuat poligon:", error);
-        alert("PERHATIAN: Gagal memuat file test.json.\n\nPastikan file 'test.json' sudah diunggah di repository GitHub Anda sejajar dengan index.html.");
+        alert("PERHATIAN: Gagal memuat file test.json.\n\nPastikan file 'test.json' sudah diunggah sejajar dengan index.html di GitHub.");
       });
   </script>
 </body>
