@@ -210,7 +210,7 @@
 
 
     // =========================================================
-    // STATE DATA & PARSER SUPER FLEKSIBEL UNTUK CSV VERTIKAL
+    // STATE DATA & NORMALISASI ID BLOK YANG LEBIH KUAT
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -221,7 +221,11 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function cleanKey(k) { return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-    function cleanBlokId(str) { return String(str || '').replace(/BLOK/ig, '').replace(/BLOCK/ig, '').trim().toUpperCase(); }
+    
+    // Normalisasi ketat ID Blok (menghilangkan spasi, tanda hubung, dan huruf kapital agar sinkron)
+    function cleanBlokId(str) { 
+      return String(str || '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); 
+    }
 
     function getPropByFuzzyKey(p, targetKeys) {
       for (let key in p) {
@@ -251,13 +255,14 @@
 
     function getProductionDataForBlok(blokId, selectedYear) {
       let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
-      if (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) {
-        return csvHistoriData[blokId][targetYear];
+      let cleanId = cleanBlokId(blokId);
+      if (csvHistoriData[cleanId] && csvHistoriData[cleanId][targetYear]) {
+        return csvHistoriData[cleanId][targetYear];
       }
       return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
-    // MESIN PENGOLAH CSV DENGAN PENCARIAN KOLOM PINTAR (FUZZY MATCHING)
+    // MESIN PENGOLAH CSV DENGAN DEBUGGING CONSOLE
     function processCsvData(dataRows) {
       csvHistoriData = {};
       availableYears.clear();
@@ -280,15 +285,14 @@
       let tempContainer = {};
 
       dataRows.forEach(row => {
-        let blokId = '', tahun = '', bulanStr = '', tonVal = 0;
+        let rawBlok = '', tahun = '', bulanStr = '', tonVal = 0;
 
-        // Cari tahu nama kunci aktual di baris CSV (mengabaikan spasi dan kapitalisasi)
         for (let k in row) {
           let ck = cleanKey(k);
           let val = String(row[k] || '').trim();
 
           if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok' || ck === 'block') {
-            blokId = cleanBlokId(val);
+            rawBlok = val;
           } else if (ck.includes('tahun') || ck === 'year' || ck === 'thn') {
             tahun = val;
           } else if (ck.includes('bulan') || ck === 'month' || ck === 'bln') {
@@ -298,7 +302,8 @@
           }
         }
 
-        if (blokId && tahun && bulanStr) {
+        if (rawBlok && tahun && bulanStr) {
+          let blokId = cleanBlokId(rawBlok);
           availableYears.add(tahun);
           if (!tempContainer[blokId]) tempContainer[blokId] = {};
           if (!tempContainer[blokId][tahun]) {
@@ -334,6 +339,8 @@
         }
       }
 
+      console.log("=== DATA CSV BERHASIL DIPROSES ===", csvHistoriData);
+
       let sortedYears = Array.from(availableYears).sort();
       latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
 
@@ -361,7 +368,7 @@
           processCsvData(results.data);
         },
         error: function(err) {
-          console.error("Gagal membaca file produksi_historis.csv. Pastikan file berada di folder root yang sama dengan index.html dan diakses menggunakan Local Server.", err);
+          console.error("Gagal membaca file produksi_historis.csv.", err);
         }
       });
     }
@@ -377,7 +384,8 @@
       geojsonLayer = L.geoJSON(dataToRender, {
         style: f => {
           let l = getLuasValue(f.properties); 
-          let prodInfo = getProductionDataForBlok(getBlokId(f.properties), selectedYear); 
+          let blokId = getBlokId(f.properties);
+          let prodInfo = getProductionDataForBlok(blokId, selectedYear); 
           let yieldTon = l > 0 ? (prodInfo.total / l) : 0;
           return { fillColor: getColor(yieldTon), weight: 1.5, color: '#fff', fillOpacity: 0.75 };
         },
@@ -402,7 +410,8 @@
       dataToRender.features.forEach(f => {
         let p = f.properties;
         let l = getLuasValue(p);
-        let prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear);
+        let blokId = getBlokId(p);
+        let prodInfo = getProductionDataForBlok(blokId, selectedYear);
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
         tLuas += l; 
@@ -490,7 +499,10 @@
 
     // START APLIKASI
     fetch('test.json').then(r => r.json()).then(data => {
-      rawGeoJsonData = data; populateDropdowns(data.features); renderMapAndKPI(data);
+      rawGeoJsonData = data; 
+      console.log("=== DATA GEOJSON BERHASIL DIMUAT ===", data.features[0].properties);
+      populateDropdowns(data.features); 
+      renderMapAndKPI(data);
       if (geojsonLayer) map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
       loadBackendCsv(); 
     }).catch(e => alert("Gagal memuat test.json. Pastikan lewat Local Server."));
