@@ -50,22 +50,32 @@
   <!-- GRUP TOMBOL ALAT LAPANGAN (KANAN)                         -->
   <!-- ========================================================= -->
   <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
-    <!-- Tombol Tracking GPS -->
-    <button id="btn-gps" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Tracking GPS">
-      <i class="fa-solid fa-location-crosshairs text-lg" id="gps-icon"></i>
+    
+    <!-- 1. Tombol Zoom Lokasi Saya -->
+    <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya">
+      <i class="fa-solid fa-location-crosshairs text-lg"></i>
     </button>
-    <!-- Tombol Add Point -->
+    
+    <!-- 2. Tombol Tracking GPS -->
+    <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)">
+      <i class="fa-solid fa-route text-lg" id="track-icon"></i>
+    </button>
+    
+    <!-- 3. Tombol Add Point -->
     <button id="btn-add-point" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Tandai Area (Titik)">
       <i class="fa-solid fa-map-pin text-lg"></i>
     </button>
-    <!-- Tombol Export -->
+    
+    <!-- 4. Tombol Export -->
     <button id="btn-export" class="bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Export Jejak & Titik (GeoJSON)">
       <i class="fa-solid fa-download text-lg"></i>
     </button>
-    <!-- Tombol Mode Hapus (Eraser) -->
+    
+    <!-- 5. Tombol Mode Hapus (Eraser) -->
     <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)">
       <i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i>
     </button>
+
   </div>
 
   <!-- ========================================================= -->
@@ -221,13 +231,14 @@
     } catch (error) { console.error("Gagal memuat plugin pengukur jarak", error); }
 
     // =========================================================
-    // 3. FITUR GPS LAPANGAN (TRACKING, TITIK, EXPORT, & SELECTIVE DELETE)
+    // 3. FITUR GPS LAPANGAN (ZOOM, TRACKING, POINT, EXPORT, & CLEAR)
     // =========================================================
-    let userMarker = null, accuracyCircle = null, isTracking = false;
+    let userMarker = null, accuracyCircle = null;
+    let isTracking = false;
     let isFirstLocation = true; 
-    let isDeleteMode = false; // Mode Hapus Selektif
+    let isDeleteMode = false;
     
-    // FeatureGroup khusus untuk menampung data yang digambar/dilacak
+    // Group khusus untuk layer lapangan (agar bisa di-export/dihapus)
     const drawnFieldItems = L.featureGroup().addTo(map);
     
     let currentTrackLine = null;
@@ -239,10 +250,11 @@
       iconSize: [16, 16], iconAnchor: [8, 8]
     });
 
-    const btnGps = document.getElementById('btn-gps');
-    const gpsIcon = document.getElementById('gps-icon');
+    const btnLocation = document.getElementById('btn-location');
+    const btnTrack = document.getElementById('btn-track');
+    const trackIcon = document.getElementById('track-icon');
 
-    // A. Fungsi Pembaruan Lokasi
+    // A. Leaflet Event - Ketika koordinat lokasi didapatkan atau diperbarui
     map.on('locationfound', function (e) {
       if (!userMarker) {
         userMarker = L.marker(e.latlng, { icon: userGpsIcon }).addTo(map);
@@ -253,6 +265,7 @@
         accuracyCircle.setRadius(e.accuracy);
       }
       
+      // Jika mode rekaman hidup, buat/perbarui garis merah & selalu pan to posisi kita
       if (isTracking) {
         currentTrackCoords.push(e.latlng);
         if (!currentTrackLine) {
@@ -261,49 +274,67 @@
         } else {
           currentTrackLine.setLatLngs(currentTrackCoords);
         }
+        
+        // Peta akan SELALU MENGKUTI/MENGUNCI posisi kita
+        if (isFirstLocation) { 
+          map.flyTo(e.latlng, 17); 
+          isFirstLocation = false; 
+        } else {
+          map.panTo(e.latlng); // <-- Fitur agar layar terus bergeser mengikuti Anda
+        }
       }
-      
-      if (isFirstLocation) { map.flyTo(e.latlng, 17); isFirstLocation = false; }
     });
 
     map.on('locationerror', function (e) {
-      alert("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi aktif.");
-      stopTracking();
+      alert("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi (Location/GPS) diaktifkan.");
+      if (isTracking) stopTracking();
     });
 
+    // B. ZOOM: Cari dan Zoom ke Lokasi Saat Ini (Tanpa Tracking)
+    btnLocation.addEventListener('click', () => {
+      if (isTracking && userMarker) {
+        map.flyTo(userMarker.getLatLng(), 17);
+      } else {
+        map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
+      }
+    });
+
+    // C. TRACKING: Fungsi Menghentikan Tracking
     function stopTracking() {
       map.stopLocate();
       currentTrackLine = null; 
       currentTrackCoords = []; 
       isTracking = false;
       
-      btnGps.classList.remove('text-red-600', 'bg-red-50');
-      gpsIcon.className = 'fa-solid fa-location-crosshairs text-lg';
-      btnGps.title = "Mulai Tracking GPS";
+      btnTrack.classList.remove('text-red-600', 'bg-red-50');
+      trackIcon.className = 'fa-solid fa-route text-lg';
+      btnTrack.title = "Mulai Rekam Jejak (Tracking)";
     }
 
-    // B. Klik Mulai/Berhenti Tracking
-    btnGps.addEventListener('click', function () {
+    // D. TRACKING: Mulai/Berhenti Merekam
+    btnTrack.addEventListener('click', function () {
       if (!isTracking) {
         isTracking = true;
         isFirstLocation = true;
+        // watch: true = Terus memantau perubahan koordinat saat berjalan
         map.locate({ setView: false, watch: true, enableHighAccuracy: true });
+        
         this.classList.add('text-red-600', 'bg-red-50');
-        gpsIcon.className = 'fa-solid fa-stop text-lg';
+        trackIcon.className = 'fa-solid fa-stop text-lg';
         this.title = "Hentikan Tracking";
       } else {
         stopTracking();
       }
     });
 
-    // C. Tambah Titik Lapangan (Add Point)
+    // E. POINT: Tambah Titik Lapangan
     document.getElementById('btn-add-point').addEventListener('click', () => {
       let pinLocation;
       if (userMarker) {
-        pinLocation = userMarker.getLatLng();
+        pinLocation = userMarker.getLatLng(); // Pakai GPS kalau ada
       } else {
-        pinLocation = map.getCenter();
-        alert("GPS belum aktif. Titik ditambahkan di tengah layar peta saat ini.");
+        pinLocation = map.getCenter(); // Pakai tengah layar kalau belum nyalakan GPS
+        alert("GPS belum ditemukan. Titik diletakkan di tengah layar peta saat ini.");
       }
 
       const pointName = prompt("Masukkan nama/keterangan untuk titik ini:", "Area Peninjauan");
@@ -315,7 +346,7 @@
       }
     });
 
-    // D. Export Data Lapangan ke GeoJSON
+    // F. EXPORT: Unduh GeoJSON
     document.getElementById('btn-export').addEventListener('click', () => {
       const geojsonData = drawnFieldItems.toGeoJSON();
       
@@ -336,7 +367,7 @@
       URL.revokeObjectURL(url);
     });
 
-    // E. MODE HAPUS LAYER SELEKTIF (KLIK UNTUK HAPUS)
+    // G. DELETE MODE: Hapus Selektif
     const btnClearLayers = document.getElementById('btn-clear-layers');
     const mapContainer = document.getElementById('map');
 
@@ -346,36 +377,28 @@
         return;
       }
       
-      isDeleteMode = !isDeleteMode; // Toggle mode
+      isDeleteMode = !isDeleteMode; // Toggle hidup/mati
       
       if (isDeleteMode) {
-        // Tampilan Aktif
         btnClearLayers.classList.remove('bg-white', 'text-gray-700', 'hover:text-red-500');
         btnClearLayers.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600');
         btnClearLayers.title = "Matikan Mode Hapus";
-        mapContainer.style.cursor = 'crosshair'; // Ubah kursor jadi target
-        alert("MODE PENGHAPUS AKTIF:\nKlik pada 'Garis Rute' atau 'Titik Pin' di peta yang ingin Anda hapus.\n\nKlik kembali tombol ini untuk keluar dari mode hapus.");
+        mapContainer.style.cursor = 'crosshair'; // Ubah kursor jadi silang bidik
+        alert("MODE PENGHAPUS AKTIF:\nKlik pada garis merah atau titik pin di peta yang ingin Anda hapus.\n\nKlik kembali ikon Penghapus untuk menonaktifkannya.");
       } else {
-        // Tampilan Non-Aktif
         btnClearLayers.classList.add('bg-white', 'text-gray-700', 'hover:text-red-500');
         btnClearLayers.classList.remove('bg-red-500', 'text-white', 'hover:bg-red-600');
         btnClearLayers.title = "Aktifkan Mode Hapus (Pilih Titik/Rute)";
-        mapContainer.style.cursor = ''; // Kembalikan kursor normal
+        mapContainer.style.cursor = ''; 
       }
     });
 
-    // Deteksi jika user mengklik item rute atau titik saat mode hapus aktif
     drawnFieldItems.on('click', function(e) {
       if (isDeleteMode) {
-        // Cegah popup terbuka saat sedang mau dihapus
-        if (e.layer.closePopup) {
-          e.layer.closePopup(); 
-        }
-        
-        if (confirm("Hapus data ini dari peta?")) {
+        if (e.layer.closePopup) e.layer.closePopup(); 
+        if (confirm("Hapus rute/titik ini dari peta?")) {
           drawnFieldItems.removeLayer(e.layer);
-          
-          // Jika tidak sengaja menghapus rute yang saat ini sedang direkam aktif, reset variabelnya
+          // Cegah sambungan garis aneh jika yang dihapus adalah garis yang sedang direkam
           if (e.layer === currentTrackLine) {
             currentTrackLine = null;
             currentTrackCoords = [];
@@ -409,7 +432,7 @@
           layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
           
           layer.on('click', (e) => {
-            // JIKA SEDANG MODE HAPUS, ABAIKAN KLIK PADA BLOK KEBUN
+            // Cegah interaksi popup jika sedang Mode Hapus
             if (isDeleteMode) {
               e.target.closePopup();
               return;
