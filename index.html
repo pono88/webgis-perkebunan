@@ -11,7 +11,7 @@
   <!-- 2. Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <!-- 3. Leaflet Measure CSS (Versi Spesifik Terkunci) -->
+  <!-- 3. Leaflet Measure CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.css" />
 
   <!-- 4. FontAwesome Icons -->
@@ -51,7 +51,7 @@
         </h1>
         <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
       </div>
-      <span class="bg-emerald-900 text-emerald-300 text-[10px] font-semibold px-2 py-1 rounded">v1.1</span>
+      <span class="bg-emerald-900 text-emerald-300 text-[10px] font-semibold px-2 py-1 rounded">v2.1</span>
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
@@ -89,7 +89,7 @@
       <!-- 2. SEARCH BLOK -->
       <section>
         <div class="relative">
-          <input type="text" id="search-blok" placeholder="Cari Nomor Blok (misal: A01)..." class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none">
+          <input type="text" id="search-blok" placeholder="Cari Nomor Blok..." class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
         </div>
       </section>
@@ -142,7 +142,6 @@
   <!-- ========================================================= -->
   <!-- AREA MAPS (PANEL KANAN)                                   -->
   <!-- ========================================================= -->
-  <!-- Diperbaiki: Ditambahkan "absolute inset-0" untuk menjamin peta tidak terpotong ukurannya -->
   <main class="flex-1 h-full relative z-10">
     <div id="map" class="absolute inset-0 w-full h-full"></div>
   </main>
@@ -152,10 +151,8 @@
   <!-- ========================================================= -->
   <!-- 1. Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  
-  <!-- 2. Leaflet Measure JS (Versi Spesifik) -->
+  <!-- 2. Leaflet Measure JS -->
   <script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.js"></script>
-  
   <!-- 3. Chart JS -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -164,31 +161,26 @@
     // =========================================================
     // 1. INISIALISASI PETA & BASEMAP
     // =========================================================
+    // Koordinat default (akan di-override saat GeoJSON dimuat)
     const map = L.map('map').setView([-2.21, 113.92], 13);
 
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
     const esriSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
     
-    L.control.layers({ "OpenStreetMap": osm, "Satelit (Esri)": esriSatelit }, null, { position: 'topright' }).addTo(map);
+    L.control.layers({ "Satelit (Esri)": esriSatelit, "OpenStreetMap": osm }, null, { position: 'topright' }).addTo(map);
+    map.addLayer(esriSatelit); // Jadikan satelit sebagai default
 
     // =========================================================
-    // 2. FITUR PENGUKURAN (DENGAN PENGAMAN TRY...CATCH)
+    // 2. FITUR PENGUKURAN Jarak & Luas
     // =========================================================
     try {
       const measureControl = new L.Control.Measure({
-        position: 'topleft',
-        primaryLengthUnit: 'meters',
-        secondaryLengthUnit: 'kilometers',
-        primaryAreaUnit: 'hectares',
-        secondaryAreaUnit: 'sqmeters',
-        activeColor: '#059669',
-        completedColor: '#047857'
+        position: 'topleft', primaryLengthUnit: 'meters', secondaryLengthUnit: 'kilometers',
+        primaryAreaUnit: 'hectares', secondaryAreaUnit: 'sqmeters',
+        activeColor: '#059669', completedColor: '#047857'
       });
       measureControl.addTo(map);
-      console.log("Alat ukur berhasil dimuat.");
-    } catch (error) {
-      console.error("Gagal memuat plugin pengukur jarak (leaflet-measure):", error);
-    }
+    } catch (error) { console.error("Gagal memuat plugin pengukur jarak", error); }
 
     // =========================================================
     // 3. FITUR GEOLOCATION (GPS)
@@ -235,70 +227,113 @@
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
+    let dataPerkebunanGeoJSON = null; // Variabel kosong untuk menampung data asli
 
-    const dataPerkebunanGeoJSON = {
-      "type": "FeatureCollection",
-      "features": [
-        { "type": "Feature", "properties": { "ID_BLOK": "A01", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_ALPHA", "AFDELING": "AFD_1", "TAHUN_TANAM": 2017, "LUAS_HA": 30.5, "SPH": 136, "YIELD_TON_HA": 24.2, "PROD_TOTAL_TON": 738.1, "PROD_BULANAN": [55, 60, 58, 62, 65, 70, 68, 64, 62, 59, 58, 57.1] }, "geometry": { "type": "Polygon", "coordinates": [[[113.90, -2.20], [113.91, -2.20], [113.91, -2.21], [113.90, -2.21], [113.90, -2.20]]] } },
-        { "type": "Feature", "properties": { "ID_BLOK": "A02", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_ALPHA", "AFDELING": "AFD_1", "TAHUN_TANAM": 2018, "LUAS_HA": 28.0, "SPH": 135, "YIELD_TON_HA": 19.5, "PROD_TOTAL_TON": 546.0, "PROD_BULANAN": [40, 42, 45, 48, 50, 52, 49, 46, 44, 43, 42, 45] }, "geometry": { "type": "Polygon", "coordinates": [[[113.91, -2.20], [113.92, -2.20], [113.92, -2.21], [113.91, -2.21], [113.91, -2.20]]] } },
-        { "type": "Feature", "properties": { "ID_BLOK": "B01", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_ALPHA", "AFDELING": "AFD_2", "TAHUN_TANAM": 2019, "LUAS_HA": 32.0, "SPH": 130, "YIELD_TON_HA": 15.8, "PROD_TOTAL_TON": 505.6, "PROD_BULANAN": [35, 38, 40, 42, 45, 48, 46, 43, 41, 40, 42, 45.6] }, "geometry": { "type": "Polygon", "coordinates": [[[113.90, -2.21], [113.91, -2.21], [113.91, -2.22], [113.90, -2.22], [113.90, -2.21]]] } },
-        { "type": "Feature", "properties": { "ID_BLOK": "C01", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_BETA", "AFDELING": "AFD_3", "TAHUN_TANAM": 2020, "LUAS_HA": 25.0, "SPH": 128, "YIELD_TON_HA": 12.4, "PROD_TOTAL_TON": 310.0, "PROD_BULANAN": [20, 22, 24, 25, 28, 30, 29, 27, 26, 25, 26, 28] }, "geometry": { "type": "Polygon", "coordinates": [[[113.92, -2.21], [113.93, -2.21], [113.93, -2.22], [113.92, -2.22], [113.92, -2.21]]] } }
-      ]
-    };
-
+    // Pewarnaan tematik berdasarkan Yield
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
     function loadGeoJSON(data) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
       
       geojsonLayer = L.geoJSON(data, {
-        style: f => ({ fillColor: getColor(f.properties.YIELD_TON_HA), weight: 1.5, color: '#fff', fillOpacity: 0.75 }),
+        // Fallback: Jika YIELD_TON_HA tidak ada, asumsikan nilainya 0
+        style: f => ({ 
+          fillColor: getColor(f.properties.YIELD_TON_HA || 0), 
+          weight: 1.5, color: '#fff', fillOpacity: 0.75 
+        }),
         onEachFeature: (f, layer) => {
-          layer.bindPopup(`<b>Blok ${f.properties.ID_BLOK}</b><br>Yield: ${f.properties.YIELD_TON_HA} Ton/Ha`);
+          const prop = f.properties;
+          const idBlok = prop.ID_BLOK || prop.id_blok || prop.Name || '-';
+          const yieldTon = prop.YIELD_TON_HA || prop.yield_ton || 0;
+          
+          layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
+          
+          // Aksi ketika Blok diklik (Update sidebar panel)
           layer.on('click', () => {
-            document.getElementById('detail-blok-id').innerText = `Blok ${f.properties.ID_BLOK}`;
-            document.getElementById('detail-tt').innerText = f.properties.TAHUN_TANAM;
-            document.getElementById('detail-luas').innerText = `${f.properties.LUAS_HA} Ha`;
-            document.getElementById('detail-sph').innerText = `${f.properties.SPH} Pkk/Ha`;
-            document.getElementById('detail-yield').innerText = `${f.properties.YIELD_TON_HA} Ton/Ha`;
+            document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
+            document.getElementById('detail-tt').innerText = prop.TAHUN_TANAM || prop.tahun || '-';
+            document.getElementById('detail-luas').innerText = `${prop.LUAS_HA || prop.luas || 0} Ha`;
+            document.getElementById('detail-sph').innerText = `${prop.SPH || prop.sph || 0} Pkk/Ha`;
+            document.getElementById('detail-yield').innerText = `${yieldTon} Ton/Ha`;
+
+            // Data grafik bulanan (Jika tidak ada di ArcMap, gunakan array kosong)
+            const dataBulanan = prop.PROD_BULANAN || [0,0,0,0,0,0,0,0,0,0,0,0];
 
             if (chartInstance) chartInstance.destroy();
             chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
               type: 'bar',
-              data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: f.properties.PROD_BULANAN, backgroundColor: '#059669', borderRadius: 4 }] },
+              data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: dataBulanan, backgroundColor: '#059669', borderRadius: 4 }] },
               options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
           });
         }
       }).addTo(map);
 
+      // Kalkulasi KPI
       let tLuas = 0, tProd = 0, count = 0;
-      data.features.forEach(f => { tLuas += f.properties.LUAS_HA; tProd += f.properties.PROD_TOTAL_TON; count++; });
+      data.features.forEach(f => { 
+        tLuas += (f.properties.LUAS_HA || f.properties.luas || 0); 
+        tProd += (f.properties.PROD_TOTAL_TON || f.properties.prod_ton || 0); 
+        count++; 
+      });
       
       document.getElementById('kpi-produksi').innerText = tProd > 0 ? `${tProd.toFixed(1)} Ton` : '0 Ton';
       document.getElementById('kpi-luas').innerText = tLuas > 0 ? `${tLuas.toFixed(1)} Ha` : '0 Ha';
       document.getElementById('kpi-yield').innerText = tLuas > 0 ? `${(tProd/tLuas).toFixed(2)} Ton/Ha` : '0 Ton/Ha';
       document.getElementById('kpi-sph').innerText = count > 0 ? '132 Pkk/Ha' : '0 Pkk/Ha';
 
-      if (geojsonLayer.getBounds().isValid()) map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+      // Auto zoom ke data poligon yang baru dimuat
+      if (geojsonLayer.getBounds().isValid()) {
+        map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+      }
     }
 
     // =========================================================
     // 5. FILTER LOGIC
     // =========================================================
     function applyFilter() {
-      const pt = document.getElementById('filter-pt').value, est = document.getElementById('filter-estate').value, afd = document.getElementById('filter-afdeling').value, src = document.getElementById('search-blok').value.toLowerCase();
-      loadGeoJSON({ type: "FeatureCollection", features: dataPerkebunanGeoJSON.features.filter(f => 
-        (pt === 'ALL' || f.properties.PT === pt) && (est === 'ALL' || f.properties.ESTATE === est) && 
-        (afd === 'ALL' || f.properties.AFDELING === afd) && (src === '' || f.properties.ID_BLOK.toLowerCase().includes(src))
-      )});
+      if (!dataPerkebunanGeoJSON) return; // Mencegah error jika data belum selesai di-download
+
+      const pt = document.getElementById('filter-pt').value;
+      const est = document.getElementById('filter-estate').value;
+      const afd = document.getElementById('filter-afdeling').value;
+      const src = document.getElementById('search-blok').value.toLowerCase();
+      
+      loadGeoJSON({ type: "FeatureCollection", features: dataPerkebunanGeoJSON.features.filter(f => {
+        const prop = f.properties;
+        const idBlok = prop.ID_BLOK || prop.id_blok || prop.Name || '';
+        const ptData = prop.PT || prop.pt || 'ALL';
+        const estData = prop.ESTATE || prop.estate || 'ALL';
+        const afdData = prop.AFDELING || prop.afdeling || 'ALL';
+
+        return (pt === 'ALL' || ptData === pt) && 
+               (est === 'ALL' || estData === est) && 
+               (afd === 'ALL' || afdData === afd) && 
+               (src === '' || idBlok.toLowerCase().includes(src))
+      })});
     }
     
     ['filter-pt', 'filter-estate', 'filter-afdeling'].forEach(id => document.getElementById(id).addEventListener('change', applyFilter));
     document.getElementById('search-blok').addEventListener('input', applyFilter);
 
-    // Load data awal
-    loadGeoJSON(dataPerkebunanGeoJSON);
+    // =========================================================
+    // 6. MEMANGGIL FILE GEOJSON EKSTERNAL (test.json)
+    // =========================================================
+    fetch('test.json')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("File tidak ditemukan atau terjadi kesalahan jaringan.");
+        }
+        return response.json();
+      })
+      .then(data => {
+        dataPerkebunanGeoJSON = data; // Simpan data ke variabel global
+        loadGeoJSON(dataPerkebunanGeoJSON); // Eksekusi load ke peta
+      })
+      .catch(error => {
+        console.error("Gagal memuat poligon:", error);
+        alert("PERHATIAN: Gagal memuat file test.json.\n\nPastikan file 'test.json' sudah diunggah di repository GitHub Anda sejajar dengan index.html.");
+      });
   </script>
 </body>
 </html>
