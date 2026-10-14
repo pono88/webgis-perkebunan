@@ -8,7 +8,7 @@
   <!-- 1. Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- 2. Leaflet CSS (Versi 1.7.1 agar stabil dengan alat ukur) -->
+  <!-- 2. Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
 
   <!-- 3. Leaflet Measure CSS -->
@@ -25,19 +25,9 @@
     .leaflet-control-measure .leaflet-control-measure-toggle { background-color: #fff; }
     .leaflet-measure-resultpopup a.zoomto { display: none !important; }
 
-    /* ========================================================= */
-    /* PERBAIKAN KOORDINAT MELOMPAT (TAILWIND VS LEAFLET SVG)    */
-    /* ========================================================= */
-    .leaflet-container svg {
-      max-width: none !important;
-      max-height: none !important;
-      display: inline-block; 
-      vertical-align: baseline;
-    }
-    .leaflet-container svg path {
-      pointer-events: auto;
-    }
-    /* ========================================================= */
+    /* PERBAIKAN KOORDINAT MELOMPAT (TAILWIND VS LEAFLET SVG) */
+    .leaflet-container svg { max-width: none !important; max-height: none !important; display: inline-block; vertical-align: baseline; }
+    .leaflet-container svg path { pointer-events: auto; }
 
     @keyframes pulse {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
@@ -50,17 +40,33 @@
 <body class="bg-gray-100 h-screen w-full overflow-hidden font-sans relative">
 
   <!-- ========================================================= -->
-  <!-- TOMBOL MELAYANG (MENU & GPS)                              -->
+  <!-- TOMBOL MELAYANG (MENU KIRI)                               -->
   <!-- ========================================================= -->
-  <!-- Tombol Hamburger (Menu) di Kiri Atas -->
   <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Buka Menu">
     <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
   </button>
 
-  <!-- Tombol GPS di Kanan -->
-  <button id="btn-gps" class="absolute top-32 right-3 z-[1000] bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Lacak Posisi GPS Saya">
-    <i class="fa-solid fa-location-crosshairs text-lg"></i>
-  </button>
+  <!-- ========================================================= -->
+  <!-- GRUP TOMBOL ALAT LAPANGAN (KANAN)                         -->
+  <!-- ========================================================= -->
+  <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
+    <!-- Tombol Tracking GPS -->
+    <button id="btn-gps" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Tracking GPS">
+      <i class="fa-solid fa-location-crosshairs text-lg" id="gps-icon"></i>
+    </button>
+    <!-- Tombol Add Point -->
+    <button id="btn-add-point" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Tandai Area (Titik)">
+      <i class="fa-solid fa-map-pin text-lg"></i>
+    </button>
+    <!-- Tombol Export -->
+    <button id="btn-export" class="bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Export Jejak & Titik (GeoJSON)">
+      <i class="fa-solid fa-download text-lg"></i>
+    </button>
+    <!-- Tombol Mode Hapus (Eraser) -->
+    <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)">
+      <i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i>
+    </button>
+  </div>
 
   <!-- ========================================================= -->
   <!-- SIDEBAR (PANEL SLIDE DARI KIRI)                           -->
@@ -73,7 +79,6 @@
         </h1>
         <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
       </div>
-      <!-- Tombol Tutup (X) -->
       <button id="btn-close-sidebar" class="text-white hover:text-emerald-300 transition-colors p-1" title="Tutup Menu">
         <i class="fa-solid fa-xmark text-2xl"></i>
       </button>
@@ -174,7 +179,6 @@
   <!-- ========================================================= -->
   <!-- JAVASCRIPT LIBRARIES                                      -->
   <!-- ========================================================= -->
-  <!-- 1. Leaflet JS (Diturunkan ke versi 1.7.1) -->
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -194,10 +198,7 @@
     // =========================================================
     // 1. INISIALISASI PETA & BASEMAP
     // =========================================================
-    // Matikan zoomControl default agar kita bisa atur posisinya ke kanan bawah
     const map = L.map('map', { zoomControl: false }).setView([-2.21, 113.92], 13);
-    
-    // Tambahkan Zoom Control di Kanan Bawah
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
@@ -220,15 +221,28 @@
     } catch (error) { console.error("Gagal memuat plugin pengukur jarak", error); }
 
     // =========================================================
-    // 3. FITUR GEOLOCATION (GPS)
+    // 3. FITUR GPS LAPANGAN (TRACKING, TITIK, EXPORT, & SELECTIVE DELETE)
     // =========================================================
     let userMarker = null, accuracyCircle = null, isTracking = false;
+    let isFirstLocation = true; 
+    let isDeleteMode = false; // Mode Hapus Selektif
+    
+    // FeatureGroup khusus untuk menampung data yang digambar/dilacak
+    const drawnFieldItems = L.featureGroup().addTo(map);
+    
+    let currentTrackLine = null;
+    let currentTrackCoords = [];
+
     const userGpsIcon = L.divIcon({
       className: 'custom-gps-marker',
       html: `<div class="w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-lg pulse-animation"></div>`,
       iconSize: [16, 16], iconAnchor: [8, 8]
     });
 
+    const btnGps = document.getElementById('btn-gps');
+    const gpsIcon = document.getElementById('gps-icon');
+
+    // A. Fungsi Pembaruan Lokasi
     map.on('locationfound', function (e) {
       if (!userMarker) {
         userMarker = L.marker(e.latlng, { icon: userGpsIcon }).addTo(map);
@@ -238,29 +252,140 @@
         accuracyCircle.setLatLng(e.latlng);
         accuracyCircle.setRadius(e.accuracy);
       }
-      if (!isTracking) { map.flyTo(e.latlng, 17); isTracking = true; }
+      
+      if (isTracking) {
+        currentTrackCoords.push(e.latlng);
+        if (!currentTrackLine) {
+          currentTrackLine = L.polyline(currentTrackCoords, { color: '#ef4444', weight: 4, opacity: 0.8 });
+          drawnFieldItems.addLayer(currentTrackLine);
+        } else {
+          currentTrackLine.setLatLngs(currentTrackCoords);
+        }
+      }
+      
+      if (isFirstLocation) { map.flyTo(e.latlng, 17); isFirstLocation = false; }
     });
 
     map.on('locationerror', function (e) {
-      alert("Gagal mendapatkan lokasi GPS.");
-      isTracking = false;
+      alert("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi aktif.");
+      stopTracking();
     });
 
-    document.getElementById('btn-gps').addEventListener('click', function () {
+    function stopTracking() {
+      map.stopLocate();
+      currentTrackLine = null; 
+      currentTrackCoords = []; 
+      isTracking = false;
+      
+      btnGps.classList.remove('text-red-600', 'bg-red-50');
+      gpsIcon.className = 'fa-solid fa-location-crosshairs text-lg';
+      btnGps.title = "Mulai Tracking GPS";
+    }
+
+    // B. Klik Mulai/Berhenti Tracking
+    btnGps.addEventListener('click', function () {
       if (!isTracking) {
+        isTracking = true;
+        isFirstLocation = true;
         map.locate({ setView: false, watch: true, enableHighAccuracy: true });
-        this.classList.add('text-emerald-600', 'bg-emerald-50');
+        this.classList.add('text-red-600', 'bg-red-50');
+        gpsIcon.className = 'fa-solid fa-stop text-lg';
+        this.title = "Hentikan Tracking";
       } else {
-        map.stopLocate();
-        if (userMarker) map.removeLayer(userMarker);
-        if (accuracyCircle) map.removeLayer(accuracyCircle);
-        userMarker = null; accuracyCircle = null; isTracking = false;
-        this.classList.remove('text-emerald-600', 'bg-emerald-50');
+        stopTracking();
+      }
+    });
+
+    // C. Tambah Titik Lapangan (Add Point)
+    document.getElementById('btn-add-point').addEventListener('click', () => {
+      let pinLocation;
+      if (userMarker) {
+        pinLocation = userMarker.getLatLng();
+      } else {
+        pinLocation = map.getCenter();
+        alert("GPS belum aktif. Titik ditambahkan di tengah layar peta saat ini.");
+      }
+
+      const pointName = prompt("Masukkan nama/keterangan untuk titik ini:", "Area Peninjauan");
+      if (pointName !== null && pointName.trim() !== "") {
+        const marker = L.marker(pinLocation).bindPopup(`<b>${pointName}</b>`);
+        marker.feature = { type: "Feature", properties: { Keterangan: pointName } };
+        drawnFieldItems.addLayer(marker);
+        marker.openPopup();
+      }
+    });
+
+    // D. Export Data Lapangan ke GeoJSON
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const geojsonData = drawnFieldItems.toGeoJSON();
+      
+      if (geojsonData.features.length === 0) {
+        alert("Belum ada rute atau titik lapangan yang direkam untuk diexport.");
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      
+      a.href = url;
+      a.download = "Data_Lapangan_WebGIS.geojson";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // E. MODE HAPUS LAYER SELEKTIF (KLIK UNTUK HAPUS)
+    const btnClearLayers = document.getElementById('btn-clear-layers');
+    const mapContainer = document.getElementById('map');
+
+    btnClearLayers.addEventListener('click', () => {
+      if (drawnFieldItems.getLayers().length === 0 && !isDeleteMode) {
+        alert("Belum ada jejak rute atau titik yang bisa dihapus.");
+        return;
+      }
+      
+      isDeleteMode = !isDeleteMode; // Toggle mode
+      
+      if (isDeleteMode) {
+        // Tampilan Aktif
+        btnClearLayers.classList.remove('bg-white', 'text-gray-700', 'hover:text-red-500');
+        btnClearLayers.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600');
+        btnClearLayers.title = "Matikan Mode Hapus";
+        mapContainer.style.cursor = 'crosshair'; // Ubah kursor jadi target
+        alert("MODE PENGHAPUS AKTIF:\nKlik pada 'Garis Rute' atau 'Titik Pin' di peta yang ingin Anda hapus.\n\nKlik kembali tombol ini untuk keluar dari mode hapus.");
+      } else {
+        // Tampilan Non-Aktif
+        btnClearLayers.classList.add('bg-white', 'text-gray-700', 'hover:text-red-500');
+        btnClearLayers.classList.remove('bg-red-500', 'text-white', 'hover:bg-red-600');
+        btnClearLayers.title = "Aktifkan Mode Hapus (Pilih Titik/Rute)";
+        mapContainer.style.cursor = ''; // Kembalikan kursor normal
+      }
+    });
+
+    // Deteksi jika user mengklik item rute atau titik saat mode hapus aktif
+    drawnFieldItems.on('click', function(e) {
+      if (isDeleteMode) {
+        // Cegah popup terbuka saat sedang mau dihapus
+        if (e.layer.closePopup) {
+          e.layer.closePopup(); 
+        }
+        
+        if (confirm("Hapus data ini dari peta?")) {
+          drawnFieldItems.removeLayer(e.layer);
+          
+          // Jika tidak sengaja menghapus rute yang saat ini sedang direkam aktif, reset variabelnya
+          if (e.layer === currentTrackLine) {
+            currentTrackLine = null;
+            currentTrackCoords = [];
+          }
+        }
       }
     });
 
     // =========================================================
-    // 4. DATA GEOJSON & LOGIKA PETA TEMATIK
+    // 4. DATA GEOJSON (POLIGON KEBUN)
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -283,7 +408,13 @@
           
           layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
           
-          layer.on('click', () => {
+          layer.on('click', (e) => {
+            // JIKA SEDANG MODE HAPUS, ABAIKAN KLIK PADA BLOK KEBUN
+            if (isDeleteMode) {
+              e.target.closePopup();
+              return;
+            }
+
             document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
             document.getElementById('detail-tt').innerText = prop.TAHUN_TANAM || prop.tahun || '-';
             document.getElementById('detail-luas').innerText = `${prop.LUAS_HA || prop.luas || 0} Ha`;
@@ -299,7 +430,6 @@
               options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
 
-            // Buka sidebar otomatis jika data diklik
             sidebar.classList.remove('-translate-x-full');
           });
         }
