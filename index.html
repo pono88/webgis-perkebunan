@@ -210,7 +210,7 @@
 
 
     // =========================================================
-    // STATE DATA & EKSPLISIT ID_BLOK VS ID_Blok MATCHING
+    // STATE DATA & PARSER CSV DENGAN HEADER
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -222,7 +222,6 @@
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function cleanKey(k) { return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
     
-    // Normalisasi nilai valuenya (Biar "A01" sama dengan "Blok A01")
     function cleanBlokId(str) { 
       return String(str || '').replace(/(BLOK|BLOCK)/ig, '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); 
     }
@@ -235,7 +234,6 @@
       return null;
     }
 
-    // [PENTING] Memprioritaskan penarikan persis 'ID_BLOK' pada GeoJSON
     function getBlokId(p) { 
       let rawVal = p['ID_BLOK'] || p['ID_Blok'] || p['id_blok'];
       if (!rawVal) {
@@ -279,50 +277,75 @@
       let yearsSet = new Set();
 
       const bulanMap = {
-        'jan':0, '1':0, 'feb':1, '2':1, 'mar':2, '3':2, 'apr':3, '4':3, 'mei':4, '5':4, 'jun':5, '6':5,
-        'jul':6, '7':6, 'agu':7, '8':7, 'sep':8, '9':8, 'okt':9, '10':9, 'nov':10, '11':10, 'des':11, '12':11
+        'jan':0, 'januari':0, 'january':0, '1':0, 
+        'feb':1, 'februari':1, 'february':1, '2':1, 
+        'mar':2, 'maret':2, 'march':2, '3':2, 
+        'apr':3, 'april':3, '4':3, 
+        'mei':4, 'may':4, '5':4, 
+        'jun':5, 'juni':5, 'june':5, '6':5, 
+        'jul':6, 'juli':6, 'july':6, '7':6, 
+        'agu':7, 'agustus':7, 'aug':7, 'august':7, '8':7, 
+        'sep':8, 'september':8, '9':8, 
+        'okt':9, 'oktober':9, 'oct':9, 'october':9, '10':9, 
+        'nov':10, 'november':10, '11':10, 
+        'des':11, 'desember':11, 'dec':11, 'december':11, '12':11
       };
 
       dataRows.forEach(row => {
-        // [PENTING] Ekstrak secara presisi 'ID_Blok' dan 'Ton' dari CSV
-        let rawBlok = row['ID_Blok'] || row['ID_BLOK'] || row['id_blok'] || '';
-        let tahun = row['Tahun'] || row['tahun'] || row['TAHUN'] || '';
-        let bulanStr = (row['Bulan'] || row['bulan'] || row['BULAN'] || '').toLowerCase();
-        let tonVal = parseAngka(row['Ton'] || row['ton'] || row['TON'] || 0);
+        let rawBlok = '', tahun = '', bulanStr = '', tonVal = 0;
 
-        // Fallback jika tidak tertangkap persis
-        if (!rawBlok || !tahun || tonVal === 0) {
-          for (let k in row) {
-            let ck = cleanKey(k);
-            let val = String(row[k] || '').trim();
-            if (!rawBlok && (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok')) rawBlok = val;
-            else if (!tahun && (ck.includes('tahun') || ck === 'year')) tahun = val;
-            else if (!bulanStr && (ck.includes('bulan') || ck === 'month')) bulanStr = val.toLowerCase();
-            else if (tonVal === 0 && (ck === 'ton' || (ck.includes('ton') && !ck.includes('jjg')))) tonVal = parseAngka(val);
+        // Pembacaan Objek Hasil Header
+        for (let k in row) {
+          let ck = cleanKey(k);
+          let val = String(row[k] || '').trim();
+
+          if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok' || ck === 'block') {
+            rawBlok = val;
+          } else if (ck.includes('tahun') || ck === 'year' || ck === 'thn') {
+            tahun = val;
+          } else if (ck.includes('bulan') || ck === 'month' || ck === 'bln') {
+            bulanStr = val.toLowerCase();
+          } else if (ck === 'ton' || (ck.includes('ton') && !ck.includes('jjg') && !ck.includes('janjang'))) {
+            tonVal = parseAngka(val);
           }
         }
 
+        // Fallback jika kunci objek berupa urutan indeks
+        if (!rawBlok && row[0]) rawBlok = row[0];
+        if (!tahun && row[1]) tahun = row[1];
+        if (!bulanStr && row[2]) bulanStr = String(row[2]).toLowerCase().trim();
+        if (tonVal === 0 && row[3]) tonVal = parseAngka(row[3]);
+
         if (rawBlok && tahun) {
           let blokId = cleanBlokId(rawBlok);
-          yearsSet.add(tahun);
+          yearsSet.add(String(tahun).trim());
           
           if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
           if (!csvHistoriData[blokId][tahun]) {
             csvHistoriData[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
           }
 
-          // Langsung Jumlahkan ke Total
           csvHistoriData[blokId][tahun].total += tonVal;
 
           let bIdx = -1;
           if (bulanStr) {
-            for (let key in bulanMap) {
-              if (bulanStr.includes(key)) {
-                bIdx = bulanMap[key];
-                break;
+            let cleanBulan = bulanStr.replace(/^0+/, ''); 
+            
+            if (bulanMap[cleanBulan] !== undefined) {
+              bIdx = bulanMap[cleanBulan];
+            } else {
+              for (let key in bulanMap) {
+                if (isNaN(key) && cleanBulan.includes(key)) {
+                  bIdx = bulanMap[key];
+                  break;
+                }
               }
             }
-            if (bIdx === -1 && !isNaN(Number(bulanStr))) bIdx = Number(bulanStr) - 1;
+            if (bIdx === -1 && !isNaN(Number(cleanBulan))) {
+               let n = Number(cleanBulan);
+               if (n >= 1 && n <= 12) bIdx = n - 1;
+            }
+
             if (bIdx >= 0 && bIdx < 12) {
               csvHistoriData[blokId][tahun].bulanan[bIdx] += tonVal;
             }
@@ -345,14 +368,13 @@
         tahunSelect.value = currentSelectedYear;
       }
 
-      console.log("=== DATA CSV TERSIMPAN (Kunci Blok sudah bersih) ===", csvHistoriData);
       if (rawGeoJsonData) applyFilter();
     }
 
     function loadBackendCsv() {
       Papa.parse('produksi_historis.csv?v=' + Date.now(), {
         download: true,
-        header: true,
+        header: true, // Membaca header baris pertama
         skipEmptyLines: true,
         complete: function(results) {
           processCsvData(results.data);
@@ -400,8 +422,6 @@
         let blokId = getBlokId(p);
         let prodInfo = getProductionDataForBlok(blokId, selectedYear);
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
-
-        if (count < 5) console.log(`Memeriksa GeoJSON Blok ID [${blokId}] -> Ketemu Ton: ${prodInfo.total}`);
 
         tLuas += l; 
         tProd += prodInfo.total; 
