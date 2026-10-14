@@ -237,8 +237,42 @@
       }
     });
 
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const geojsonData = drawnFieldItems.toGeoJSON();
+      if (geojsonData.features.length === 0) return alert("Belum ada rute atau titik lapangan.");
+      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = "Data_Lapangan_WebGIS.geojson";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    });
+
+    const btnClearLayers = document.getElementById('btn-clear-layers');
+    const mapContainer = document.getElementById('map');
+
+    btnClearLayers.addEventListener('click', () => {
+      if (drawnFieldItems.getLayers().length === 0 && !isDeleteMode) return alert("Belum ada jejak yang bisa dihapus.");
+      isDeleteMode = !isDeleteMode; 
+      if (isDeleteMode) {
+        btnClearLayers.classList.replace('bg-white', 'bg-red-500'); btnClearLayers.classList.replace('text-gray-700', 'text-white');
+        mapContainer.style.cursor = 'crosshair';
+      } else {
+        btnClearLayers.classList.replace('bg-red-500', 'bg-white'); btnClearLayers.classList.replace('text-white', 'text-gray-700');
+        mapContainer.style.cursor = ''; 
+      }
+    });
+
+    drawnFieldItems.on('click', function(e) {
+      if (isDeleteMode) {
+        if (e.layer.closePopup) e.layer.closePopup(); 
+        if (confirm("Hapus rute/titik ini?")) {
+          drawnFieldItems.removeLayer(e.layer);
+          if (e.layer === currentTrackLine) { currentTrackLine = null; currentTrackCoords = []; }
+        }
+      }
+    });
+
     // =========================================================
-    // PARSER ANGKA PINTAR (Dapat membaca format Indo & US dari Power Query)
+    // PARSER ANGKA PINTAR
     // =========================================================
     function parseAngka(val) {
       if (val === undefined || val === null || val === '') return 0;
@@ -262,7 +296,7 @@
     }
 
     // =========================================================
-    // SMART BLOK MATCHER (Otomatis hapus kata "Blok" agar match 100%)
+    // LOGIKA PENCOCOKAN MURNI MENGGUNAKAN "ID_BLOK"
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -274,14 +308,24 @@
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function getProp(p, keys) { for (let key of keys) { if (p[key] !== undefined && p[key] !== null && p[key] !== "") return p[key]; } return null; }
     
-    // Membersihkan tulisan ID. Misal "Blok A01" menjadi "A01"
+    // Pembersih kata "blok" agar A01 dan Blok A01 tetap match
     function cleanBlokId(str) {
       if (!str) return '';
       return String(str).replace(/BLOK/ig, '').replace(/BLOCK/ig, '').trim().toUpperCase();
     }
     
+    // MENCARI SPESIFIK KEY "ID_Blok" DI GEOJSON
     function getBlokId(p) { 
-      return cleanBlokId(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']));
+      let rawId = '';
+      for (let key in p) {
+        if (key.toLowerCase() === 'id_blok') { // FOKUS KETAT KE NAMA "ID_BLOK"
+          rawId = p[key];
+          break;
+        }
+      }
+      // Fallback sangat tipis jika tidak ada ID_Blok sama sekali
+      if (!rawId) rawId = getProp(p, ['Name', 'BLOK', 'blok', 'KODE_BLOK']);
+      return cleanBlokId(rawId);
     }
 
     function getPTValue(properties) {
@@ -321,7 +365,6 @@
       return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
-    // Fungsi Super Ketat: Membuang kolom JJG/Janjang, mengutamakan TON
     function filterTonBulananCSV(rowObj) {
       const bulanPendek = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
       const bulanPanjang = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
@@ -331,8 +374,6 @@
         let val = 0;
         
         let kandidat = Object.keys(rowObj).filter(k => k.toLowerCase().includes(bp) || k.toLowerCase().includes(pjg));
-        
-        // Buang tegas semua yang namanya mengandung 'jjg' atau 'janjang'
         kandidat = kandidat.filter(k => !k.toLowerCase().includes('jjg') && !k.toLowerCase().includes('janjang'));
 
         if (kandidat.length > 0) {
@@ -348,7 +389,7 @@
     }
 
     function loadBackendCsv() {
-      const csvUrl = 'produksi_historis.csv?v=' + new Date().getTime(); // Mencegah Browser Cache
+      const csvUrl = 'produksi_historis.csv?v=' + new Date().getTime(); 
 
       Papa.parse(csvUrl, {
         download: true,
@@ -362,18 +403,22 @@
           results.data.forEach(row => {
             let blokId = '', tahun = '';
             
+            // MENCARI SPESIFIK HEADER "ID_Blok" DI CSV
             for (let k in row) {
               const lk = k.toLowerCase();
-              if (lk === 'id_blok' || lk === 'blok' || lk === 'block' || lk === 'kode_blok') {
+              if (lk === 'id_blok') { // FOKUS KETAT KE HEADER "ID_BLOK"
                 blokId = cleanBlokId(row[k]);
               }
               if (lk.includes('tahun') || lk.includes('year')) {
                 tahun = String(row[k]).trim();
               }
             }
+            // Fallback tipis (hanya dipakai jika benar-benar tidak ada header ID_Blok)
             if(!blokId) {
               for (let k in row) {
-                if (k.toLowerCase().includes('blok') || k.toLowerCase().includes('id')) blokId = cleanBlokId(row[k]);
+                if (k.toLowerCase() === 'blok' || k.toLowerCase() === 'block' || k.toLowerCase() === 'kode_blok') {
+                    blokId = cleanBlokId(row[k]);
+                }
               }
             }
 
@@ -383,7 +428,6 @@
 
               let bulananVals = filterTonBulananCSV(row);
               
-              // Mencari total ton
               let totalVal = 0;
               let keyTotal = Object.keys(row).find(k => 
                   (k.toLowerCase().includes('total') || k.toLowerCase().includes('prod')) && 
@@ -401,7 +445,7 @@
             }
           });
           
-          console.log(`Berhasil memproses ${matchedCount} baris data CSV.`);
+          console.log(`Berhasil memproses baris CSV. Kunci Penghubung: ID_Blok`);
 
           const sortedYears = Array.from(availableYears).sort();
           latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
@@ -412,11 +456,10 @@
             tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`;
           });
 
-          // Refresh map untuk menerapkan data produksi yang baru masuk
           if (rawGeoJsonData) applyFilter();
         },
         error: function(err) {
-          console.error("Gagal membaca produksi_historis.csv. Pastikan file dijalankan via Local Server!");
+          console.error("Gagal membaca produksi_historis.csv.");
         }
       });
     }
@@ -439,7 +482,6 @@
       ptSet.forEach(val => ptSel.innerHTML += `<option value="${val}">${val}</option>`);
       estSet.forEach(val => estSel.innerHTML += `<option value="${val}">${val}</option>`);
       afdSet.forEach(val => afdSel.innerHTML += `<option value="${val}">${val}</option>`);
-      // Kembalikan tulisan "Blok" di UI Dropdown
       blokSet.forEach(val => blokSel.innerHTML += `<option value="${val}">Blok ${val}</option>`);
 
       ptSel.value = ptSet.has(curPt) ? curPt : 'ALL'; estSel.value = estSet.has(curEst) ? curEst : 'ALL';
@@ -607,12 +649,10 @@
           map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
         }
 
-        // Panggil dan timpa Data Produksi dari CSV!
         loadBackendCsv(); 
       })
       .catch(error => {
         console.error("Gagal memuat poligon:", error);
-        alert("PERHATIAN: Pastikan Anda membuka web ini menggunakan Local Server (seperti Live Server di VSCode) agar data bisa dimuat!");
       });
   </script>
 </body>
