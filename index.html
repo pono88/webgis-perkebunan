@@ -50,32 +50,26 @@
   <!-- GRUP TOMBOL ALAT LAPANGAN (KANAN)                         -->
   <!-- ========================================================= -->
   <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
-    
     <!-- 1. Tombol Zoom Lokasi Saya -->
     <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya">
       <i class="fa-solid fa-location-crosshairs text-lg"></i>
     </button>
-    
     <!-- 2. Tombol Tracking GPS -->
     <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)">
       <i class="fa-solid fa-route text-lg" id="track-icon"></i>
     </button>
-    
     <!-- 3. Tombol Add Point -->
     <button id="btn-add-point" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Tandai Area (Titik)">
       <i class="fa-solid fa-map-pin text-lg"></i>
     </button>
-    
     <!-- 4. Tombol Export -->
     <button id="btn-export" class="bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Export Jejak & Titik (GeoJSON)">
       <i class="fa-solid fa-download text-lg"></i>
     </button>
-    
     <!-- 5. Tombol Mode Hapus (Eraser) -->
     <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)">
       <i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i>
     </button>
-
   </div>
 
   <!-- ========================================================= -->
@@ -95,7 +89,7 @@
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
-      <!-- 1. CASCADING FILTER OTOMATIS DARI DATA PETA -->
+      <!-- 1. CASCADING FILTER OTOMATIS -->
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
           <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
@@ -401,11 +395,20 @@
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
-    let rawGeoJsonData = null; // Menyimpan data asli dari file
+    let rawGeoJsonData = null; 
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
-    // Fungsi untuk mengisi pilihan dropdown filter secara otomatis berdasarkan data JSON
+    // Helper untuk mendeteksi nilai properti dengan berbagai kemungkinan nama kolom
+    function getProp(p, keys) {
+      for (let key of keys) {
+        if (p[key] !== undefined && p[key] !== null && p[key] !== "") {
+          return p[key];
+        }
+      }
+      return null;
+    }
+
     function populateFilterOptions(data) {
       const ptSet = new Set();
       const estSet = new Set();
@@ -413,9 +416,9 @@
 
       data.features.forEach(f => {
         const p = f.properties;
-        const pt = p.PT || p.pt || p.COMPANY || p.company;
-        const est = p.ESTATE || p.estate;
-        const afd = p.AFDELING || p.afdeling || p.AFD || p.afd;
+        const pt = getProp(p, ['PT', 'pt', 'PT_', 'COMPANY', 'company', 'NM_PT', 'nm_pt', 'PERUSAHAAN', 'perusahaan']);
+        const est = getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']);
+        const afd = getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']);
 
         if (pt) ptSet.add(pt);
         if (est) estSet.add(est);
@@ -426,7 +429,6 @@
       const estSelect = document.getElementById('filter-estate');
       const afdSelect = document.getElementById('filter-afdeling');
 
-      // Kosongkan opsi lama kecuali default "-- Semua --"
       ptSelect.innerHTML = '<option value="ALL">-- Semua PT --</option>';
       estSelect.innerHTML = '<option value="ALL">-- Semua Estate --</option>';
       afdSelect.innerHTML = '<option value="ALL">-- Semua Afdeling --</option>';
@@ -440,27 +442,50 @@
       if (geojsonLayer) map.removeLayer(geojsonLayer);
       
       geojsonLayer = L.geoJSON(dataToRender, {
-        style: f => ({ 
-          fillColor: getColor(f.properties.YIELD_TON_HA || f.properties.yield || 0), 
-          weight: 1.5, color: '#fff', fillOpacity: 0.75 
-        }),
+        style: f => {
+          const p = f.properties;
+          const yieldTon = Number(getProp(p, ['YIELD_TON_HA', 'yield_ton_ha', 'YIELD', 'yield', 'PROD_TON_HA']) || 0);
+          return { fillColor: getColor(yieldTon), weight: 1.5, color: '#fff', fillOpacity: 0.75 };
+        },
         onEachFeature: (f, layer) => {
           const prop = f.properties;
-          const idBlok = prop.ID_BLOK || prop.id_blok || prop.Name || prop.BLOK || '-';
-          const yieldTon = prop.YIELD_TON_HA || prop.yield || 0;
+          const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK']) || '-';
+          const yieldTon = Number(getProp(prop, ['YIELD_TON_HA', 'yield_ton_ha', 'YIELD', 'yield', 'PROD_TON_HA']) || 0);
           
           layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon} Ton/Ha`);
           
           layer.on('click', (e) => {
             if (isDeleteMode) { e.target.closePopup(); return; }
 
-            document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
-            document.getElementById('detail-tt').innerText = prop.TAHUN_TANAM || prop.tahun || '-';
-            document.getElementById('detail-luas').innerText = `${prop.LUAS_HA || prop.luas || 0} Ha`;
-            document.getElementById('detail-sph').innerText = `${prop.SPH || prop.sph || 0} Pkk/Ha`;
-            document.getElementById('detail-yield').innerText = `${yieldTon} Ton/Ha`;
+            const thnTan = getProp(prop, ['TAHUN_TANAM', 'tahun_tanam', 'TAHUN', 'tahun', 'THN_TANAM']) || '-';
+            const luasHa = Number(getProp(prop, ['LUAS_HA', 'luas_ha', 'LUAS', 'luas', 'AREA']) || 0);
+            const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
 
-            const dataBulanan = prop.PROD_BULANAN || prop.produksi_bulanan || [0,0,0,0,0,0,0,0,0,0,0,0];
+            document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
+            document.getElementById('detail-tt').innerText = thnTan;
+            document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
+            document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
+            document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
+
+            // Deteksi array produksi bulanan dari berbagai kemungkinan nama field
+            let dataBulanan = prop.PROD_BULANAN || prop.prod_bulanan || prop.produksi_bulanan;
+            if (!Array.isArray(dataBulanan)) {
+              // Jika di peta disimpan terpisah per kolom bulan (misal: JAN, FEB, MAR, dst.)
+              dataBulanan = [
+                Number(getProp(prop, ['JAN', 'jan', 'PROD_01']) || 0),
+                Number(getProp(prop, ['FEB', 'feb', 'PROD_02']) || 0),
+                Number(getProp(prop, ['MAR', 'mar', 'PROD_03']) || 0),
+                Number(getProp(prop, ['APR', 'apr', 'PROD_04']) || 0),
+                Number(getProp(prop, ['MEI', 'MAY', 'may', 'mei', 'PROD_05']) || 0),
+                Number(getProp(prop, ['JUN', 'jun', 'PROD_06']) || 0),
+                Number(getProp(prop, ['JUL', 'jul', 'PROD_07']) || 0),
+                Number(getProp(prop, ['AGU', 'AUG', 'aug', 'agu', 'PROD_08']) || 0),
+                Number(getProp(prop, ['SEP', 'sep', 'PROD_09']) || 0),
+                Number(getProp(prop, ['OKT', 'OCT', 'oct', 'okt', 'PROD_10']) || 0),
+                Number(getProp(prop, ['NOV', 'nov', 'PROD_11']) || 0),
+                Number(getProp(prop, ['DES', 'DEC', 'dec', 'des', 'PROD_12']) || 0)
+              ];
+            }
 
             if (chartInstance) chartInstance.destroy();
             chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
@@ -474,24 +499,43 @@
         }
       }).addTo(map);
 
-      // Hitung ulang nilai KPI dari fitur yang sedang tampil
-      let tLuas = 0, tProd = 0, totalSph = 0, count = 0;
+      // Kalkulasi KPI Total & Rata-rata Berdasarkan Data yang Ditampilkan
+      let tLuas = 0, tProd = 0, totalYieldSum = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
         const p = f.properties;
-        tLuas += Number(p.LUAS_HA || p.luas || 0);
-        tProd += Number(p.PROD_TOTAL_TON || p.produksi_total || 0);
-        totalSph += Number(p.SPH || p.sph || 0);
+        const l = Number(getProp(p, ['LUAS_HA', 'luas_ha', 'LUAS', 'luas', 'AREA']) || 0);
+        
+        // Cari total produksi (bisa dari field total, atau menjumlahkan seluruh bulan)
+        let prod = Number(getProp(p, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON']) || 0);
+        if (prod === 0) {
+          // Jika field total kosong, jumlahkan dari kolom bulanan
+          const bulanList = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','AGU','SEP','OKT','NOV','DES'];
+          bulanList.forEach(b => {
+            prod += Number(getProp(p, [b, b.toLowerCase(), 'PROD_' + b]) || 0);
+          });
+        }
+
+        const yld = Number(getProp(p, ['YIELD_TON_HA', 'yield_ton_ha', 'YIELD', 'yield']) || 0);
+        const sph = Number(getProp(p, ['SPH', 'sph', 'POKOK_HA']) || 0);
+
+        tLuas += l;
+        tProd += prod;
+        totalYieldSum += yld;
+        totalSphSum += sph;
         count++;
       });
 
-      document.getElementById('kpi-produksi').innerText = tProd > 0 ? `${tProd.toFixed(1)} Ton` : '0 Ton';
-      document.getElementById('kpi-luas').innerText = tLuas > 0 ? `${tLuas.toFixed(1)} Ha` : '0 Ha';
-      document.getElementById('kpi-yield').innerText = tLuas > 0 ? `${(tProd/tLuas).toFixed(2)} Ton/Ha` : '0 Ton/Ha';
-      document.getElementById('kpi-sph').innerText = count > 0 ? `${Math.round(totalSph/count)} Pkk/Ha` : '0 Pkk/Ha';
+      const avgYield = count > 0 ? (totalYieldSum / count) : 0;
+      const avgSph = count > 0 ? Math.round(totalSphSum / count) : 0;
+
+      document.getElementById('kpi-produksi').innerText = `${tProd.toFixed(1)} Ton`;
+      document.getElementById('kpi-luas').innerText = `${tLuas.toFixed(1)} Ha`;
+      document.getElementById('kpi-yield').innerText = `${avgYield.toFixed(2)} Ton/Ha`;
+      document.getElementById('kpi-sph').innerText = `${avgSph} Pkk/Ha`;
     }
 
     // =========================================================
-    // 5. FILTER LOGIC & PENCARIAN BERDASARKAN ATRIBUT DATA
+    // 5. FILTER LOGIC
     // =========================================================
     function applyFilter() {
       if (!rawGeoJsonData) return;
@@ -503,10 +547,10 @@
       
       const filteredFeatures = rawGeoJsonData.features.filter(f => {
         const p = f.properties;
-        const pt = String(p.PT || p.pt || p.COMPANY || p.company || 'ALL');
-        const est = String(p.ESTATE || p.estate || 'ALL');
-        const afd = String(p.AFDELING || p.afdeling || p.AFD || p.afd || 'ALL');
-        const idBlok = String(p.ID_BLOK || p.id_blok || p.Name || p.BLOK || '').toLowerCase();
+        const pt = String(getProp(p, ['PT', 'pt', 'PT_', 'COMPANY', 'company', 'NM_PT', 'nm_pt', 'PERUSAHAAN', 'perusahaan']) || 'ALL');
+        const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
+        const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
+        const idBlok = String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK']) || '').toLowerCase();
 
         const matchPt = (ptVal === 'ALL' || pt === ptVal);
         const matchEst = (estVal === 'ALL' || est === estVal);
@@ -534,8 +578,8 @@
       })
       .then(data => {
         rawGeoJsonData = data; 
-        populateFilterOptions(rawGeoJsonData); // Mengisi dropdown sidebar otomatis
-        renderMapAndKPI(rawGeoJsonData);      // Tampilkan peta & hitung KPI awal
+        populateFilterOptions(rawGeoJsonData); 
+        renderMapAndKPI(rawGeoJsonData);      
         
         if (geojsonLayer && geojsonLayer.getBounds().isValid()) {
           map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
