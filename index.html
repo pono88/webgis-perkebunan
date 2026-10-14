@@ -391,7 +391,7 @@
     });
 
     // =========================================================
-    // 4. DATA GEOJSON & PENGISIAN FILTER OTOMATIS BERDASARKAN KATA KUNCI PT / COMPANY
+    // 4. DATA GEOJSON & PENGISIAN FILTER OTOMATIS
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -399,11 +399,10 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
-    // Fungsi cerdas untuk mendeteksi atribut PT/Company secara fleksibel (tidak peduli huruf besar/kecil)
+    // Pencarian otomatis kolom PT / Company
     function getPTValue(properties) {
       for (let key in properties) {
         const lowerKey = key.toLowerCase();
-        // Cek apakah nama kolom mengandung kata 'pt' atau 'company' atau 'perusahaan'
         if (lowerKey.includes('pt') || lowerKey.includes('company') || lowerKey.includes('perusahaan')) {
           const val = properties[key];
           if (val !== undefined && val !== null && String(val).trim() !== "") {
@@ -412,6 +411,20 @@
         }
       }
       return null;
+    }
+
+    // Pencarian otomatis kolom Luas / Ha (mengandung kata 'luas' atau 'ha')
+    function getLuasValue(properties) {
+      for (let key in properties) {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey.includes('luas') || lowerKey.includes('ha')) {
+          const val = Number(properties[key]);
+          if (!isNaN(val) && val > 0) {
+            return val;
+          }
+        }
+      }
+      return 0;
     }
 
     function getProp(p, keys) {
@@ -430,8 +443,6 @@
 
       data.features.forEach(f => {
         const p = f.properties;
-        
-        // Memanggil fungsi pencarian PT otomatis yang mendukung keyword pt/company
         const pt = getPTValue(p);
         const est = getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']);
         const afd = getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']);
@@ -474,7 +485,7 @@
             if (isDeleteMode) { e.target.closePopup(); return; }
 
             const thnTan = getProp(prop, ['TAHUN_TANAM', 'tahun_tanam', 'TAHUN', 'tahun', 'THN_TANAM']) || '-';
-            const luasHa = Number(getProp(prop, ['LUAS_HA', 'luas_ha', 'LUAS', 'luas', 'AREA']) || 0);
+            const luasHa = getLuasValue(prop);
             const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
 
             document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
@@ -516,7 +527,7 @@
       let tLuas = 0, tProd = 0, totalYieldSum = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
         const p = f.properties;
-        const l = Number(getProp(p, ['LUAS_HA', 'luas_ha', 'LUAS', 'luas', 'AREA']) || 0);
+        const l = getLuasValue(p);
         
         let prod = Number(getProp(p, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON']) || 0);
         if (prod === 0) {
