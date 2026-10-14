@@ -210,7 +210,7 @@
 
 
     // =========================================================
-    // STATE DATA & PARSER CSV MURNI
+    // STATE DATA & PARSER CSV MURNI (PENJUMLAHAN TON LANGSUNG)
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -254,9 +254,12 @@
       let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
       let cleanId = cleanBlokId(blokId);
       
-      if (csvHistoriData[cleanId]) {
-        let activeYearData = csvHistoriData[cleanId][targetYear] || csvHistoriData[cleanId][Object.keys(csvHistoriData[cleanId])[0]];
-        if (activeYearData) return activeYearData;
+      if (csvHistoriData[cleanId] && csvHistoriData[cleanId][targetYear]) {
+        return csvHistoriData[cleanId][targetYear];
+      }
+      // Jika data dengan target tahun tidak ada, coba ambil tahun pertama yang ada
+      if (csvHistoriData[cleanId] && Object.keys(csvHistoriData[cleanId]).length > 0) {
+        return csvHistoriData[cleanId][Object.keys(csvHistoriData[cleanId])[0]];
       }
       return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
@@ -266,21 +269,9 @@
       let yearsSet = new Set();
 
       const bulanMap = {
-        'jan': 0, 'januari': 0, '1': 0,
-        'feb': 1, 'februari': 1, '2': 1,
-        'mar': 2, 'maret': 2, '3': 2,
-        'apr': 3, 'april': 3, '4': 3,
-        'mei': 4, 'may': 4, '5': 4,
-        'jun': 5, 'juni': 5, '6': 5,
-        'jul': 6, 'juli': 6, '7': 6,
-        'agu': 7, 'aug': 7, 'agustus': 7, '8': 7,
-        'sep': 8, 'september': 8, '9': 8,
-        'okt': 9, 'oct': 9, 'oktober': 9, '10': 9,
-        'nov': 10, 'november': 10, '11': 10,
-        'des': 11, 'dec': 11, 'desember': 11, '12': 11
+        'jan':0, '1':0, 'feb':1, '2':1, 'mar':2, '3':2, 'apr':3, '4':3, 'mei':4, '5':4, 'jun':5, '6':5,
+        'jul':6, '7':6, 'agu':7, '8':7, 'sep':8, '9':8, 'okt':9, '10':9, 'nov':10, '11':10, 'des':11, '12':11
       };
-
-      let tempContainer = {};
 
       dataRows.forEach(row => {
         let rawBlok = '', tahun = '', bulanStr = '', tonVal = 0;
@@ -304,11 +295,15 @@
           let blokId = cleanBlokId(rawBlok);
           yearsSet.add(tahun);
           
-          if (!tempContainer[blokId]) tempContainer[blokId] = {};
-          if (!tempContainer[blokId][tahun]) {
-            tempContainer[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+          if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
+          if (!csvHistoriData[blokId][tahun]) {
+            csvHistoriData[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
           }
 
+          // [PENTING]: Langsung jumlahkan tonVal ke total (tanpa bergantung pada kolom bulan)
+          csvHistoriData[blokId][tahun].total += tonVal;
+
+          // Coba susun ke grafik bulan jika kolom bulan ada
           let bIdx = -1;
           if (bulanStr) {
             for (let key in bulanMap) {
@@ -320,37 +315,12 @@
             if (bIdx === -1 && !isNaN(Number(bulanStr))) {
               bIdx = Number(bulanStr) - 1;
             }
-          }
-
-          if (bIdx >= 0 && bIdx < 12) {
-            tempContainer[blokId][tahun].bulanan[bIdx] += tonVal; // Akumulasi jika ada baris bulan ganda
+            if (bIdx >= 0 && bIdx < 12) {
+              csvHistoriData[blokId][tahun].bulanan[bIdx] += tonVal;
+            }
           }
         }
       });
-
-      for (let bId in tempContainer) {
-        csvHistoriData[bId] = {};
-        for (let thn in tempContainer[bId]) {
-          let arrBulan = tempContainer[bId][thn].bulanan;
-          let sumTotal = arrBulan.reduce((a, b) => a + b, 0);
-          
-          if (sumTotal === 0) {
-            dataRows.forEach(r => {
-              let rBlok = cleanBlokId(r['ID_Blok'] || r['blok'] || '');
-              let rThn = String(r['Tahun'] || r['tahun'] || '').trim();
-              if (rBlok === bId && rThn === thn) {
-                let tVal = parseAngka(r['Ton'] || r['ton'] || 0);
-                if (tVal > 0) sumTotal += tVal;
-              }
-            });
-          }
-
-          csvHistoriData[bId][thn] = {
-            bulanan: arrBulan,
-            total: sumTotal
-          };
-        }
-      }
 
       availableYears = Array.from(yearsSet).sort();
       latestYear = availableYears.length > 0 ? availableYears[availableYears.length - 1] : null;
@@ -367,6 +337,7 @@
         tahunSelect.value = currentSelectedYear;
       }
 
+      console.log("Data CSV Terproses:", csvHistoriData);
       if (rawGeoJsonData) applyFilter();
     }
 
@@ -386,7 +357,7 @@
 
 
     // =========================================================
-    // RENDER PETA & KPI (SUM LANGSUNG DARI KOLOM TON CSV)
+    // RENDER PETA & KPI
     // =========================================================
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
@@ -427,7 +398,7 @@
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
         tLuas += l; 
-        tProd += prodInfo.total; // Akumulasi total nilai Ton langsung dari CSV sesuai filter
+        tProd += prodInfo.total; // Akumulasi total nilai Ton langsung dari CSV
         totalSphSum += sph; 
         count++;
       });
