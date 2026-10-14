@@ -29,10 +29,12 @@
 </head>
 <body class="bg-gray-100 h-screen w-full overflow-hidden font-sans relative">
 
+  <!-- Tombol Menu Kiri -->
   <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center">
     <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
   </button>
 
+  <!-- Tombol Alat Kanan -->
   <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
     <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya"><i class="fa-solid fa-location-crosshairs text-lg"></i></button>
     <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)"><i class="fa-solid fa-route text-lg" id="track-icon"></i></button>
@@ -41,6 +43,7 @@
     <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)"><i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i></button>
   </div>
 
+  <!-- Sidebar -->
   <aside id="sidebar" class="fixed top-0 left-0 z-[3000] h-full w-80 md:w-96 bg-white shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-r border-gray-200">
     <div class="p-4 bg-emerald-800 text-white flex items-center justify-between">
       <div>
@@ -207,7 +210,7 @@
 
 
     // =========================================================
-    // STATE DATA & AKUMULASI PRODUKSI TAHUNAN DARI BACKEND CSV
+    // STATE DATA & PARSER SUPER FLEKSIBEL UNTUK CSV VERTIKAL
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -217,7 +220,7 @@
     let latestYear = null;
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
-    function cleanKey(k) { return String(k).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+    function cleanKey(k) { return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
     function cleanBlokId(str) { return String(str || '').replace(/BLOK/ig, '').replace(/BLOCK/ig, '').trim().toUpperCase(); }
 
     function getPropByFuzzyKey(p, targetKeys) {
@@ -254,7 +257,7 @@
       return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
-    // MESIN PENGOLAH DATA CSV VERTIKAL
+    // MESIN PENGOLAH CSV DENGAN PENCARIAN KOLOM PINTAR (FUZZY MATCHING)
     function processCsvData(dataRows) {
       csvHistoriData = {};
       availableYears.clear();
@@ -279,13 +282,14 @@
       dataRows.forEach(row => {
         let blokId = '', tahun = '', bulanStr = '', tonVal = 0;
 
+        // Cari tahu nama kunci aktual di baris CSV (mengabaikan spasi dan kapitalisasi)
         for (let k in row) {
           let ck = cleanKey(k);
           let val = String(row[k] || '').trim();
 
           if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok' || ck === 'block') {
             blokId = cleanBlokId(val);
-          } else if (ck.includes('tahun') || ck.includes('year')) {
+          } else if (ck.includes('tahun') || ck === 'year' || ck === 'thn') {
             tahun = val;
           } else if (ck.includes('bulan') || ck === 'month' || ck === 'bln') {
             bulanStr = val.toLowerCase();
@@ -357,14 +361,14 @@
           processCsvData(results.data);
         },
         error: function(err) {
-          console.error("Gagal memuat file produksi_historis.csv dari backend.", err);
+          console.error("Gagal membaca file produksi_historis.csv. Pastikan file berada di folder root yang sama dengan index.html dan diakses menggunakan Local Server.", err);
         }
       });
     }
 
 
     // =========================================================
-    // RENDER PETA & KPI (FILTER TAHUN AKTIF)
+    // RENDER PETA & KPI
     // =========================================================
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
