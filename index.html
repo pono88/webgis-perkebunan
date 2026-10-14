@@ -29,12 +29,10 @@
 </head>
 <body class="bg-gray-100 h-screen w-full overflow-hidden font-sans relative">
 
-  <!-- Tombol Menu Kiri -->
   <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center">
     <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
   </button>
 
-  <!-- Tombol Alat Kanan -->
   <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
     <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya"><i class="fa-solid fa-location-crosshairs text-lg"></i></button>
     <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)"><i class="fa-solid fa-route text-lg" id="track-icon"></i></button>
@@ -43,7 +41,6 @@
     <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)"><i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i></button>
   </div>
 
-  <!-- Sidebar -->
   <aside id="sidebar" class="fixed top-0 left-0 z-[3000] h-full w-80 md:w-96 bg-white shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-r border-gray-200">
     <div class="p-4 bg-emerald-800 text-white flex items-center justify-between">
       <div>
@@ -54,14 +51,6 @@
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-4">
-      
-      <!-- Upload Manual -->
-      <section class="bg-amber-50 p-3.5 rounded-lg border border-amber-200 space-y-2">
-        <h2 class="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-file-csv"></i> Upload CSV Manual</h2>
-        <p class="text-[10px] text-amber-700">Gunakan jika server lokal memblokir akses file otomatis.</p>
-        <input type="file" id="csv-file-input" accept=".csv" class="w-full text-xs text-gray-700 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-amber-600 file:text-white cursor-pointer hover:file:bg-amber-700 transition-colors">
-      </section>
-
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah & Waktu</h2>
         <div>
@@ -218,7 +207,7 @@
 
 
     // =========================================================
-    // STATE DATA & AKUMULASI PRODUKSI TAHUNAN
+    // STATE DATA & AKUMULASI PRODUKSI TAHUNAN DARI BACKEND CSV
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -266,10 +255,9 @@
     }
 
     // MESIN PENGOLAH DATA CSV VERTIKAL
-    function processCsvData(dataRows, isManualUpload = false) {
+    function processCsvData(dataRows) {
       csvHistoriData = {};
       availableYears.clear();
-      let rowParsedCount = 0;
 
       const bulanMap = {
         'jan': 0, 'januari': 0,
@@ -326,26 +314,20 @@
 
           if (bIdx >= 0 && bIdx < 12) {
             tempContainer[blokId][tahun].bulanan[bIdx] = tonVal;
-            rowParsedCount++;
           }
         }
       });
 
-      // Akumulasi total ton di tahun yang sama
       for (let bId in tempContainer) {
         csvHistoriData[bId] = {};
         for (let thn in tempContainer[bId]) {
           let arrBulan = tempContainer[bId][thn].bulanan;
-          let sumTotal = arrBulan.reduce((a, b) => a + b, 0); // Jumlah total data ton pada tahun tersebut
+          let sumTotal = arrBulan.reduce((a, b) => a + b, 0);
           csvHistoriData[bId][thn] = {
             bulanan: arrBulan,
             total: sumTotal
           };
         }
-      }
-
-      if (isManualUpload) {
-        alert(`SUKSES! Berhasil mengakumulasi ${rowParsedCount} baris data produksi.`);
       }
 
       let sortedYears = Array.from(availableYears).sort();
@@ -372,23 +354,13 @@
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
-          processCsvData(results.data, false);
+          processCsvData(results.data);
+        },
+        error: function(err) {
+          console.error("Gagal memuat file produksi_historis.csv dari backend.", err);
         }
       });
     }
-
-    document.getElementById('csv-file-input').addEventListener('change', function(e) {
-      let file = e.target.files[0];
-      if (!file) return;
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: function(results) {
-          processCsvData(results.data, true);
-        },
-        error: function(err) { alert("Gagal membaca file CSV: " + err.message); }
-      });
-    });
 
 
     // =========================================================
@@ -430,7 +402,7 @@
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
         tLuas += l; 
-        tProd += prodInfo.total; // Akumulasi total ton pada tahun yang dipilih
+        tProd += prodInfo.total; 
         totalSphSum += sph; 
         count++;
       });
