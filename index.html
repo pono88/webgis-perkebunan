@@ -210,7 +210,7 @@
 
 
     // =========================================================
-    // STATE DATA & PARSER CSV MURNI (PENJUMLAHAN TON LANGSUNG)
+    // STATE DATA & EKSPLISIT ID_BLOK VS ID_Blok MATCHING
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -221,7 +221,11 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function cleanKey(k) { return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-    function cleanBlokId(str) { return String(str || '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); }
+    
+    // Normalisasi nilai valuenya (Biar "A01" sama dengan "Blok A01")
+    function cleanBlokId(str) { 
+      return String(str || '').replace(/(BLOK|BLOCK)/ig, '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); 
+    }
 
     function getPropByFuzzyKey(p, targetKeys) {
       for (let key in p) {
@@ -231,7 +235,15 @@
       return null;
     }
 
-    function getBlokId(p) { return cleanBlokId(getPropByFuzzyKey(p, ['idblok', 'blok', 'block', 'kodeblok'])); }
+    // [PENTING] Memprioritaskan penarikan persis 'ID_BLOK' pada GeoJSON
+    function getBlokId(p) { 
+      let rawVal = p['ID_BLOK'] || p['ID_Blok'] || p['id_blok'];
+      if (!rawVal) {
+        rawVal = getPropByFuzzyKey(p, ['idblok', 'blok', 'block', 'kodeblok']);
+      }
+      return cleanBlokId(rawVal); 
+    }
+    
     function getPTValue(p) { return getPropByFuzzyKey(p, ['pt', 'company', 'perusahaan']) || null; }
     function getLuasValue(p) { return Number(getPropByFuzzyKey(p, ['luas', 'ha'])) || 0; }
     function getTahunTanamValue(p) { return getPropByFuzzyKey(p, ['tahuntanam', 'thntanam', 'tahun']) || '-'; }
@@ -249,7 +261,6 @@
       return isNaN(parseFloat(str)) ? 0 : parseFloat(str);
     }
 
-    // Ambil data bulanan & total ton per blok berdasarkan tahun
     function getProductionDataForBlok(blokId, selectedYear) {
       let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
       let cleanId = cleanBlokId(blokId);
@@ -257,7 +268,6 @@
       if (csvHistoriData[cleanId] && csvHistoriData[cleanId][targetYear]) {
         return csvHistoriData[cleanId][targetYear];
       }
-      // Jika data dengan target tahun tidak ada, coba ambil tahun pertama yang ada
       if (csvHistoriData[cleanId] && Object.keys(csvHistoriData[cleanId]).length > 0) {
         return csvHistoriData[cleanId][Object.keys(csvHistoriData[cleanId])[0]];
       }
@@ -274,20 +284,21 @@
       };
 
       dataRows.forEach(row => {
-        let rawBlok = '', tahun = '', bulanStr = '', tonVal = 0;
+        // [PENTING] Ekstrak secara presisi 'ID_Blok' dan 'Ton' dari CSV
+        let rawBlok = row['ID_Blok'] || row['ID_BLOK'] || row['id_blok'] || '';
+        let tahun = row['Tahun'] || row['tahun'] || row['TAHUN'] || '';
+        let bulanStr = (row['Bulan'] || row['bulan'] || row['BULAN'] || '').toLowerCase();
+        let tonVal = parseAngka(row['Ton'] || row['ton'] || row['TON'] || 0);
 
-        for (let k in row) {
-          let ck = cleanKey(k);
-          let val = String(row[k] || '').trim();
-
-          if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok' || ck === 'block') {
-            rawBlok = val;
-          } else if (ck.includes('tahun') || ck === 'year' || ck === 'thn') {
-            tahun = val;
-          } else if (ck.includes('bulan') || ck === 'month' || ck === 'bln') {
-            bulanStr = val.toLowerCase();
-          } else if (ck === 'ton' || (ck.includes('ton') && !ck.includes('jjg') && !ck.includes('janjang'))) {
-            tonVal = parseAngka(val);
+        // Fallback jika tidak tertangkap persis
+        if (!rawBlok || !tahun || tonVal === 0) {
+          for (let k in row) {
+            let ck = cleanKey(k);
+            let val = String(row[k] || '').trim();
+            if (!rawBlok && (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok')) rawBlok = val;
+            else if (!tahun && (ck.includes('tahun') || ck === 'year')) tahun = val;
+            else if (!bulanStr && (ck.includes('bulan') || ck === 'month')) bulanStr = val.toLowerCase();
+            else if (tonVal === 0 && (ck === 'ton' || (ck.includes('ton') && !ck.includes('jjg')))) tonVal = parseAngka(val);
           }
         }
 
@@ -300,10 +311,9 @@
             csvHistoriData[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
           }
 
-          // [PENTING]: Langsung jumlahkan tonVal ke total (tanpa bergantung pada kolom bulan)
+          // Langsung Jumlahkan ke Total
           csvHistoriData[blokId][tahun].total += tonVal;
 
-          // Coba susun ke grafik bulan jika kolom bulan ada
           let bIdx = -1;
           if (bulanStr) {
             for (let key in bulanMap) {
@@ -312,9 +322,7 @@
                 break;
               }
             }
-            if (bIdx === -1 && !isNaN(Number(bulanStr))) {
-              bIdx = Number(bulanStr) - 1;
-            }
+            if (bIdx === -1 && !isNaN(Number(bulanStr))) bIdx = Number(bulanStr) - 1;
             if (bIdx >= 0 && bIdx < 12) {
               csvHistoriData[blokId][tahun].bulanan[bIdx] += tonVal;
             }
@@ -337,7 +345,7 @@
         tahunSelect.value = currentSelectedYear;
       }
 
-      console.log("Data CSV Terproses:", csvHistoriData);
+      console.log("=== DATA CSV TERSIMPAN (Kunci Blok sudah bersih) ===", csvHistoriData);
       if (rawGeoJsonData) applyFilter();
     }
 
@@ -355,10 +363,6 @@
       });
     }
 
-
-    // =========================================================
-    // RENDER PETA & KPI
-    // =========================================================
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
       let selectedYear = document.getElementById('filter-tahun').value;
@@ -397,8 +401,10 @@
         let prodInfo = getProductionDataForBlok(blokId, selectedYear);
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
+        if (count < 5) console.log(`Memeriksa GeoJSON Blok ID [${blokId}] -> Ketemu Ton: ${prodInfo.total}`);
+
         tLuas += l; 
-        tProd += prodInfo.total; // Akumulasi total nilai Ton langsung dari CSV
+        tProd += prodInfo.total; 
         totalSphSum += sph; 
         count++;
       });
