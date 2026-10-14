@@ -257,7 +257,6 @@
         } else {
           currentTrackLine.setLatLngs(currentTrackCoords);
         }
-        
         if (isFirstLocation) { map.flyTo(e.latlng, 17); isFirstLocation = false; } 
         else { map.panTo(e.latlng); }
       }
@@ -274,63 +273,28 @@
     });
 
     function stopTracking() {
-      map.stopLocate();
-      currentTrackLine = null; currentTrackCoords = []; isTracking = false;
-      btnTrack.classList.remove('text-red-600', 'bg-red-50');
-      trackIcon.className = 'fa-solid fa-route text-lg';
+      map.stopLocate(); currentTrackLine = null; currentTrackCoords = []; isTracking = false;
+      btnTrack.classList.remove('text-red-600', 'bg-red-50'); trackIcon.className = 'fa-solid fa-route text-lg';
     }
 
     btnTrack.addEventListener('click', function () {
       if (!isTracking) {
         isTracking = true; isFirstLocation = true;
         map.locate({ setView: false, watch: true, enableHighAccuracy: true });
-        this.classList.add('text-red-600', 'bg-red-50');
-        trackIcon.className = 'fa-solid fa-stop text-lg';
-      } else {
-        stopTracking();
-      }
+        this.classList.add('text-red-600', 'bg-red-50'); trackIcon.className = 'fa-solid fa-stop text-lg';
+      } else { stopTracking(); }
     });
 
     document.getElementById('btn-add-point').addEventListener('click', () => {
       let pinLocation = userMarker ? userMarker.getLatLng() : map.getCenter();
       const pointName = prompt("Masukkan nama/keterangan untuk titik ini:", "Area Peninjauan");
       if (pointName !== null && pointName.trim() !== "") {
-        createPointMarker(pinLocation, pointName.trim());
+        const marker = L.marker(pinLocation);
+        marker.feature = { type: "Feature", properties: { Keterangan: pointName.trim() } };
+        marker.bindPopup(`<div style="font-size: 12px; text-align: center;"><b>${pointName.trim()}</b></div>`);
+        drawnFieldItems.addLayer(marker); marker.openPopup();
       }
     });
-
-    function createPointMarker(latlng, name) {
-      const marker = L.marker(latlng);
-      marker.feature = { type: "Feature", properties: { Keterangan: name } };
-      updateMarkerPopup(marker);
-      drawnFieldItems.addLayer(marker);
-      marker.openPopup();
-    }
-
-    function updateMarkerPopup(marker) {
-      const currentName = marker.feature.properties.Keterangan;
-      marker.bindPopup(`
-        <div style="font-size: 12px; text-align: center;">
-          <b>${currentName}</b><br><br>
-          <button onclick="editMarkerName('${L.stamp(marker)}')" style="background-color: #059669; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">
-            <i class="fa-solid fa-pen-to-square"></i> Edit Nama
-          </button>
-        </div>
-      `);
-    }
-
-    window.editMarkerName = function(markerId) {
-      drawnFieldItems.eachLayer(layer => {
-        if (L.stamp(layer) === parseInt(markerId)) {
-          const newName = prompt("Masukkan nama/keterangan baru untuk titik ini:", layer.feature.properties.Keterangan);
-          if (newName !== null && newName.trim() !== "") {
-            layer.feature.properties.Keterangan = newName.trim();
-            updateMarkerPopup(layer);
-            layer.openPopup();
-          }
-        }
-      });
-    };
 
     document.getElementById('btn-export').addEventListener('click', () => {
       const geojsonData = drawnFieldItems.toGeoJSON();
@@ -349,7 +313,7 @@
       isDeleteMode = !isDeleteMode; 
       if (isDeleteMode) {
         btnClearLayers.classList.replace('bg-white', 'bg-red-500'); btnClearLayers.classList.replace('text-gray-700', 'text-white');
-        mapContainer.style.cursor = 'crosshair'; alert("MODE PENGHAPUS AKTIF: Klik pada rute/titik di peta untuk menghapus.");
+        mapContainer.style.cursor = 'crosshair';
       } else {
         btnClearLayers.classList.replace('bg-red-500', 'bg-white'); btnClearLayers.classList.replace('text-white', 'text-gray-700');
         mapContainer.style.cursor = ''; 
@@ -367,7 +331,7 @@
     });
 
     // =========================================================
-    // 4. DATA GEOJSON & HISTORI PRODUKSI CSV BACKEND
+    // 4. DATA GEOJSON (Spasial) & HISTORI PRODUKSI CSV (Produksi Mutlak)
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -378,14 +342,13 @@
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function getProp(p, keys) { for (let key of keys) { if (p[key] !== undefined && p[key] !== null && p[key] !== "") return p[key]; } return null; }
-    function getBlokId(p) { return String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '').trim(); }
+    
+    function getBlokId(p) { return String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '').trim().toUpperCase(); }
 
     function getPTValue(properties) {
       for (let key in properties) {
-        const lowerKey = key.toLowerCase();
-        if (lowerKey.includes('pt') || lowerKey.includes('company') || lowerKey.includes('perusahaan')) {
-          const val = properties[key];
-          if (val !== undefined && val !== null && String(val).trim() !== "") return String(val).trim();
+        if (key.toLowerCase().includes('pt') || key.toLowerCase().includes('company')) {
+          if (properties[key] !== undefined && properties[key] !== null && String(properties[key]).trim() !== "") return String(properties[key]).trim();
         }
       }
       return null;
@@ -393,8 +356,7 @@
 
     function getLuasValue(properties) {
       for (let key in properties) {
-        const lowerKey = key.toLowerCase();
-        if (lowerKey.includes('luas') || lowerKey.includes('ha')) {
+        if (key.toLowerCase().includes('luas') || key.toLowerCase().includes('ha')) {
           const val = Number(properties[key]);
           if (!isNaN(val) && val > 0) return val;
         }
@@ -406,40 +368,40 @@
       for (let key in properties) {
         const cleanKey = key.toLowerCase().replace(/[\s_]/g, '');
         if (cleanKey.includes('tahuntanam') || cleanKey.includes('thntanam')) {
-          const val = properties[key];
-          if (val !== undefined && val !== null && String(val).trim() !== "") return String(val).trim();
+          if (properties[key]) return String(properties[key]).trim();
         }
       }
       return getProp(properties, ['TAHUN', 'tahun', 'THN', 'thn']) || '-';
     }
 
+    // Mengambil data secara KETAT HANYA DARI CSV
     function getProductionDataForBlok(blokId, selectedYear) {
       const targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
       if (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) {
         return csvHistoriData[blokId][targetYear];
       }
-      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 }; // Default 0 jika tidak ada di CSV
     }
 
-    // Fungsi cerdas untuk mengabaikan 'Janjang' dan memprioritaskan 'Ton' pada pembacaan CSV/JSON
-    function filterTonBulanan(rowObj) {
-      const bulanKeys = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
-      return bulanKeys.map(b => {
-        let val = 0, foundTon = false;
-        for (let k in rowObj) {
-          const lk = k.toLowerCase();
-          // Skip tegas kolom janjang / jjg
-          if (lk.includes('jjg') || lk.includes('janjang')) continue;
-          
-          if (lk.includes(b)) {
-            // Prioritaskan kolom yang mengandung tulisan ton
-            if (lk.includes('ton')) {
-              val = Number(rowObj[k]) || 0;
-              foundTon = true;
-            } else if (!foundTon) {
-              // Simpan nilai sementara jika tidak ada ton, tapi bukan janjang
-              val = Number(rowObj[k]) || 0;
-            }
+    // Fungsi Super Ketat: Membuang kolom JJG/Janjang, mengutamakan TON dari baris CSV
+    function filterTonBulananCSV(rowObj) {
+      const bulanPendek = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
+      const bulanPanjang = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+
+      return bulanPendek.map((bp, idx) => {
+        let pjg = bulanPanjang[idx];
+        let val = 0;
+        
+        let kandidat = Object.keys(rowObj).filter(k => k.toLowerCase().includes(bp) || k.toLowerCase().includes(pjg));
+        // Buang yang mengandung 'jjg' atau 'janjang'
+        kandidat = kandidat.filter(k => !k.toLowerCase().includes('jjg') && !k.toLowerCase().includes('janjang'));
+
+        if (kandidat.length > 0) {
+          let tonKey = kandidat.find(k => k.toLowerCase().includes('ton'));
+          if (tonKey) {
+            val = Number(rowObj[tonKey]) || 0;
+          } else {
+            val = Number(rowObj[kandidat[0]]) || 0;
           }
         }
         return val;
@@ -447,7 +409,10 @@
     }
 
     function loadBackendCsv() {
-      Papa.parse('produksi_historis.csv', {
+      // Menggunakan timestamp agar tidak ada file CSV lama yang nyangkut di cache browser
+      const csvUrl = 'produksi_historis.csv?v=' + new Date().getTime();
+
+      Papa.parse(csvUrl, {
         download: true,
         header: true,
         skipEmptyLines: true,
@@ -457,18 +422,28 @@
 
           results.data.forEach(row => {
             let blokId = '', tahun = '';
+            
             for (let k in row) {
               const lk = k.toLowerCase();
-              if (lk.includes('blok') || lk.includes('block') || lk.includes('id_blok')) blokId = String(row[k]).trim();
-              if (lk.includes('tahun') || lk.includes('year')) tahun = String(row[k]).trim();
+              if (lk === 'id_blok' || lk === 'blok' || lk === 'block' || lk === 'kode_blok') {
+                blokId = String(row[k]).trim().toUpperCase();
+              }
+              if (lk.includes('tahun') || lk.includes('year')) {
+                tahun = String(row[k]).trim();
+              }
+            }
+            if(!blokId) {
+              for (let k in row) {
+                if (k.toLowerCase().includes('blok') || k.toLowerCase().includes('id')) blokId = String(row[k]).trim().toUpperCase();
+              }
             }
 
             if (blokId && tahun) {
               availableYears.add(tahun);
               if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
 
-              // Gunakan fungsi filter cerdas untuk menghindari bug kata janjang
-              let bulananVals = filterTonBulanan(row);
+              // Baca produksi murni dari CSV
+              let bulananVals = filterTonBulananCSV(row);
               let totalVal = Number(getProp(row, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'TOTAL_TON'])) || bulananVals.reduce((a, b) => a + b, 0);
 
               csvHistoriData[blokId][tahun] = { bulanan: bulananVals, total: totalVal };
@@ -484,10 +459,11 @@
             tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`;
           });
 
-          if (rawGeoJsonData) applyFilter(); // Trigger ulang render dengan data CSV
+          // Refresh map setelah CSV berhasil dimuat agar warna map terupdate berdasarkan produksi CSV
+          if (rawGeoJsonData) applyFilter();
         },
         error: function(err) {
-          console.warn("File produksi_historis.csv tidak ditemukan. Memakai fallback data GeoJSON.");
+          console.error("Gagal membaca produksi_historis.csv. Semua produksi akan bernilai 0.");
         }
       });
     }
@@ -532,12 +508,16 @@
     function showBlokDetail(prop) {
       const blokId = getBlokId(prop);
       const selectedYear = document.getElementById('filter-tahun').value;
+      
+      // Ambil Luas & Pokok mutlak dari GeoJSON
       const thnTan = getTahunTanamValue(prop);
       const luasHa = getLuasValue(prop);
       const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
       
+      // Ambil Produksi mutlak dari CSV
       const prodInfo = getProductionDataForBlok(blokId, selectedYear);
-      const yieldTon = luasHa > 0 ? (prodInfo.total / luasHa) : 0;
+      let yieldTon = luasHa > 0 ? (prodInfo.total / luasHa) : 0;
+      let dataBulanan = prodInfo.bulanan; // Pasti format [0..0] jika kosong di CSV
 
       document.getElementById('detail-blok-id').innerText = `Blok ${blokId}`;
       document.getElementById('detail-blok-id').className = 'bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono';
@@ -545,12 +525,6 @@
       document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
       document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
       document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
-
-      let dataBulanan = prodInfo.bulanan;
-      // Fallback ke GeoJSON asli jika CSV kosong untuk blok ini
-      if (dataBulanan.every(v => v === 0)) {
-        dataBulanan = filterTonBulanan(prop); 
-      }
 
       if (chartInstance) chartInstance.destroy();
       chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
@@ -569,15 +543,9 @@
       geojsonLayer = L.geoJSON(dataToRender, {
         style: f => {
           const p = f.properties;
-          const l = getLuasValue(p);
-          const prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear);
-          // Jika CSV tidak ada, fallback ambil total dari GeoJSON agar peta tetap berwarna
-          let prodTotal = prodInfo.total;
-          if (prodTotal === 0) {
-            let arrBulanan = filterTonBulanan(p);
-            prodTotal = Number(getProp(p, ['PROD_TOTAL_TON', 'TOTAL_TON'])) || arrBulanan.reduce((a, b) => a + b, 0);
-          }
-          const yieldTon = l > 0 ? (prodTotal / l) : 0;
+          const l = getLuasValue(p); // Luas dari GeoJSON
+          const prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear); // Prod dari CSV
+          const yieldTon = l > 0 ? (prodInfo.total / l) : 0;
           return { fillColor: getColor(yieldTon), weight: 1.5, color: '#fff', fillOpacity: 0.75 };
         },
         onEachFeature: (f, layer) => {
@@ -585,13 +553,7 @@
           const blokId = getBlokId(prop);
           const l = getLuasValue(prop);
           const prodInfo = getProductionDataForBlok(blokId, selectedYear);
-          
-          let prodTotal = prodInfo.total;
-          if (prodTotal === 0) {
-            let arrBulanan = filterTonBulanan(prop);
-            prodTotal = Number(getProp(prop, ['PROD_TOTAL_TON', 'TOTAL_TON'])) || arrBulanan.reduce((a, b) => a + b, 0);
-          }
-          const yieldTon = l > 0 ? (prodTotal / l) : 0;
+          const yieldTon = l > 0 ? (prodInfo.total / l) : 0;
           
           layer.bindPopup(`<b>Blok ${blokId}</b><br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
           layer.on('click', (e) => {
@@ -607,15 +569,12 @@
         const p = f.properties;
         const l = getLuasValue(p);
         const prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear);
-        
-        let prodTotal = prodInfo.total;
-        if (prodTotal === 0) {
-          let arrBulanan = filterTonBulanan(p);
-          prodTotal = Number(getProp(p, ['PROD_TOTAL_TON', 'TOTAL_TON'])) || arrBulanan.reduce((a, b) => a + b, 0);
-        }
         const sph = Number(getProp(p, ['SPH', 'sph', 'POKOK_HA']) || 0);
 
-        tLuas += l; tProd += prodTotal; totalSphSum += sph; count++;
+        tLuas += l; 
+        tProd += prodInfo.total; 
+        totalSphSum += sph; 
+        count++;
       });
 
       const avgYield = tLuas > 0 ? (tProd / tLuas) : 0;
@@ -694,13 +653,13 @@
         rawGeoJsonData = data; 
         populateDropdowns(rawGeoJsonData.features); 
         
-        // RENDER AWAL AGAR POV LANGSUNG FOKUS KE LOKASI PETA
+        // RENDER AWAL AGAR POV LANGSUNG FOKUS KE LOKASI PETA (Dengan prod 0 sementara)
         renderMapAndKPI(rawGeoJsonData);      
         if (geojsonLayer && geojsonLayer.getBounds().isValid()) {
           map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
         }
 
-        // AMBIL DATA CSV UNTUK TIMPA DATA PRODUKSI YANG LEBIH AKURAT
+        // AMBIL DATA CSV (Pasti ambil versi terbaru tanpa cache, lalu render ulang map)
         loadBackendCsv(); 
       })
       .catch(error => {
