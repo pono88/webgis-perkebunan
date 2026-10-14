@@ -210,19 +210,18 @@
 
 
     // =========================================================
-    // STATE DATA & NORMALISASI ID BLOK YANG LEBIH KUAT
+    // STATE DATA & NORMALISASI PENCARIAN TAHUN & ID BLOK
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
     let rawGeoJsonData = null; 
     let csvHistoriData = {}; 
-    let availableYears = new Set();
+    let availableYears = [];
     let latestYear = null;
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
     function cleanKey(k) { return String(k || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
     
-    // Normalisasi ketat ID Blok (menghilangkan spasi, tanda hubung, dan huruf kapital agar sinkron)
     function cleanBlokId(str) { 
       return String(str || '').replace(/[^a-zA-Z0-9]/g, '').trim().toUpperCase(); 
     }
@@ -253,33 +252,37 @@
       return isNaN(parseFloat(str)) ? 0 : parseFloat(str);
     }
 
+    // PENGAMBILAN DATA PRODUKSI BERDASARKAN TAHUN (JIKA 'ALL', OTOMATIS AMBIL TAHUN TERAKHIR DI CSV)
     function getProductionDataForBlok(blokId, selectedYear) {
       let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
       let cleanId = cleanBlokId(blokId);
-      if (csvHistoriData[cleanId] && csvHistoriData[cleanId][targetYear]) {
-        return csvHistoriData[cleanId][targetYear];
+      
+      if (csvHistoriData[cleanId]) {
+        // Jika targetYear tidak ditemukan, fallback ke tahun pertama yang tersedia pada blok tersebut
+        let activeYearData = csvHistoriData[cleanId][targetYear] || csvHistoriData[cleanId][Object.keys(csvHistoriData[cleanId])[0]];
+        if (activeYearData) return activeYearData;
       }
       return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
-    // MESIN PENGOLAH CSV DENGAN DEBUGGING CONSOLE
+    // MESIN PENGOLAH CSV DENGAN AKUMULASI OTOMATIS BULAN & TAHUN
     function processCsvData(dataRows) {
       csvHistoriData = {};
-      availableYears.clear();
+      let yearsSet = new Set();
 
       const bulanMap = {
-        'jan': 0, 'januari': 0,
-        'feb': 1, 'februari': 1,
-        'mar': 2, 'maret': 2,
-        'apr': 3, 'april': 3,
-        'mei': 4, 'may': 4,
-        'jun': 5, 'juni': 5,
-        'jul': 6, 'juli': 6,
-        'agu': 7, 'aug': 7, 'agustus': 7,
-        'sep': 8, 'september': 8,
-        'okt': 9, 'oct': 9, 'oktober': 9,
-        'nov': 10, 'november': 10,
-        'des': 11, 'dec': 11, 'desember': 11
+        'jan': 0, 'januari': 0, '1': 0,
+        'feb': 1, 'februari': 1, '2': 1,
+        'mar': 2, 'maret': 2, '3': 2,
+        'apr': 3, 'april': 3, '4': 3,
+        'mei': 4, 'may': 4, '5': 4,
+        'jun': 5, 'juni': 5, '6': 5,
+        'jul': 6, 'juli': 6, '7': 6,
+        'agu': 7, 'aug': 7, 'agustus': 7, '8': 7,
+        'sep': 8, 'september': 8, '9': 8,
+        'okt': 9, 'oct': 9, 'oktober': 9, '10': 9,
+        'nov': 10, 'november': 10, '11': 10,
+        'des': 11, 'dec': 11, 'desember': 11, '12': 11
       };
 
       let tempContainer = {};
@@ -302,23 +305,26 @@
           }
         }
 
-        if (rawBlok && tahun && bulanStr) {
+        if (rawBlok && tahun) {
           let blokId = cleanBlokId(rawBlok);
-          availableYears.add(tahun);
+          yearsSet.add(tahun);
+          
           if (!tempContainer[blokId]) tempContainer[blokId] = {};
           if (!tempContainer[blokId][tahun]) {
             tempContainer[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
           }
 
           let bIdx = -1;
-          for (let key in bulanMap) {
-            if (bulanStr.includes(key)) {
-              bIdx = bulanMap[key];
-              break;
+          if (bulanStr) {
+            for (let key in bulanMap) {
+              if (bulanStr.includes(key)) {
+                bIdx = bulanMap[key];
+                break;
+              }
             }
-          }
-          if (bIdx === -1 && !isNaN(Number(bulanStr))) {
-            bIdx = Number(bulanStr) - 1;
+            if (bIdx === -1 && !isNaN(Number(bulanStr))) {
+              bIdx = Number(bulanStr) - 1;
+            }
           }
 
           if (bIdx >= 0 && bIdx < 12) {
@@ -327,11 +333,26 @@
         }
       });
 
+      // Kalkulasi total ton pertahun untuk setiap blok
       for (let bId in tempContainer) {
         csvHistoriData[bId] = {};
         for (let thn in tempContainer[bId]) {
           let arrBulan = tempContainer[bId][thn].bulanan;
           let sumTotal = arrBulan.reduce((a, b) => a + b, 0);
+          
+          // Jika baris CSV sudah langsung memiliki total atau data per baris tanpa pecahan bulan spesifik
+          if (sumTotal === 0) {
+            // Cek apakah ada nilai ton langsung di baris tersebut
+            dataRows.forEach(r => {
+              let rBlok = cleanBlokId(r['ID_Blok'] || r['blok'] || '');
+              let rThn = String(r['Tahun'] || r['tahun'] || '').trim();
+              if (rBlok === bId && rThn === thn) {
+                let tVal = parseAngka(r['Ton'] || r['ton'] || 0);
+                if (tVal > 0) sumTotal = tVal;
+              }
+            });
+          }
+
           csvHistoriData[bId][thn] = {
             bulanan: arrBulan,
             total: sumTotal
@@ -339,23 +360,22 @@
         }
       }
 
-      console.log("=== DATA CSV BERHASIL DIPROSES ===", csvHistoriData);
-
-      let sortedYears = Array.from(availableYears).sort();
-      latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
+      availableYears = Array.from(yearsSet).sort();
+      latestYear = availableYears.length > 0 ? availableYears[availableYears.length - 1] : null;
 
       let tahunSelect = document.getElementById('filter-tahun');
       let currentSelectedYear = tahunSelect.value;
       
       tahunSelect.innerHTML = '<option value="ALL">-- Tahun Berjalan (YTD / Terbaru) --</option>';
-      sortedYears.forEach(y => { 
+      availableYears.forEach(y => { 
         tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`; 
       });
       
-      if (sortedYears.includes(currentSelectedYear)) {
+      if (availableYears.includes(currentSelectedYear)) {
         tahunSelect.value = currentSelectedYear;
       }
 
+      console.log("Data CSV Terproses:", csvHistoriData);
       if (rawGeoJsonData) applyFilter();
     }
 
@@ -500,7 +520,6 @@
     // START APLIKASI
     fetch('test.json').then(r => r.json()).then(data => {
       rawGeoJsonData = data; 
-      console.log("=== DATA GEOJSON BERHASIL DIMUAT ===", data.features[0].properties);
       populateDropdowns(data.features); 
       renderMapAndKPI(data);
       if (geojsonLayer) map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
