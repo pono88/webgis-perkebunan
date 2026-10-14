@@ -153,7 +153,7 @@
       <section class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
         <h2 class="text-xs font-bold text-gray-800 border-b pb-2 mb-3 flex justify-between">
           <span><i class="fa-solid fa-circle-info text-emerald-600 mr-1"></i> Detail Blok</span>
-          <span id="detail-blok-id" class="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono">Pilih Blok</span>
+          <span id="detail-blok-id" class="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded font-mono">Belum Dipilih</span>
         </h2>
         <div class="text-xs space-y-1.5 text-gray-600 mb-4">
           <div class="flex justify-between"><span>Tahun Tanam:</span> <b id="detail-tt" class="text-gray-900">-</b></div>
@@ -439,6 +439,21 @@
       return 0;
     }
 
+    // Deteksi otomatis kolom Tahun Tanam (mengandung kata 'tahun tanam' / 'thn tanam' tanpa peduli spasi/kapital)
+    function getTahunTanamValue(properties) {
+      for (let key in properties) {
+        const cleanKey = key.toLowerCase().replace(/[\s_]/g, '');
+        if (cleanKey.includes('tahuntanam') || cleanKey.includes('thntanam')) {
+          const val = properties[key];
+          if (val !== undefined && val !== null && String(val).trim() !== "") {
+            return String(val).trim();
+          }
+        }
+      }
+      // Fallback cadangan jika tidak ada kata 'tanam'
+      return getProp(properties, ['TAHUN', 'tahun', 'THN', 'thn', 'TAHUN_TANAM', 'tahun_tanam']) || '-';
+    }
+
     // Deteksi otomatis total produksi dari field atau akumulasi bulanan
     function getProduksiValue(properties) {
       let prod = Number(getProp(properties, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON', 'TOTAL_PROD']) || 0);
@@ -496,17 +511,34 @@
       blokSelect.value = blokSet.has(currentBlok) ? currentBlok : 'ALL';
     }
 
+    function clearBlokDetail() {
+      document.getElementById('detail-blok-id').innerText = 'Belum Dipilih';
+      document.getElementById('detail-blok-id').className = 'bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded font-mono';
+      document.getElementById('detail-tt').innerText = '-';
+      document.getElementById('detail-luas').innerText = '- Ha';
+      document.getElementById('detail-sph').innerText = '- Pokok/Ha';
+      document.getElementById('detail-yield').innerText = '- Ton/Ha';
+
+      if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+      }
+      // Kosongkan kanvas chart
+      const ctx = document.getElementById('chartProduksi').getContext('2d');
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
+
     function showBlokDetail(prop) {
       const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '-';
-      const thnTan = getProp(prop, ['TAHUN_TANAM', 'tahun_tanam', 'TAHUN', 'tahun', 'THN_TANAM']) || '-';
+      const thnTan = getTahunTanamValue(prop);
       const luasHa = getLuasValue(prop);
       const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
       const totalProd = getProduksiValue(prop);
       
-      // Rata-rata Yield Blok = Produksi Blok / Luas Blok
       const yieldTon = luasHa > 0 ? (totalProd / luasHa) : 0;
 
       document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
+      document.getElementById('detail-blok-id').className = 'bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono';
       document.getElementById('detail-tt').innerText = thnTan;
       document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
       document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
@@ -562,12 +594,12 @@
           
           layer.on('click', (e) => {
             if (isDeleteMode) { e.target.closePopup(); return; }
+            document.getElementById('filter-blok').value = idBlok;
             showBlokDetail(prop);
           });
         }
       }).addTo(map);
 
-      // Kalkulasi KPI Total & Rata-rata Yield = Total Produksi / Total Luas
       let tLuas = 0, tProd = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
         const p = f.properties;
@@ -581,7 +613,6 @@
         count++;
       });
 
-      // Rata-rata Yield Wilayah = Total Produksi / Total Luas
       const avgYield = tLuas > 0 ? (tProd / tLuas) : 0;
       const avgSph = count > 0 ? Math.round(totalSphSum / count) : 0;
 
@@ -617,7 +648,6 @@
         return matchPt && matchEst && matchAfd && matchBlok;
       });
 
-      // Perbarui opsi dropdown blok agar menyesuaikan data yang terfilter di PT/Estate/Afdeling
       populateDropdowns(rawGeoJsonData.features.filter(f => {
         const p = f.properties;
         const pt = String(getPTValue(p) || 'ALL');
@@ -628,12 +658,10 @@
                (afdVal === 'ALL' || afd === afdVal);
       }));
 
-      // Kembalikan pilihan blok jika masih valid
       document.getElementById('filter-blok').value = blokVal;
-
       renderMapAndKPI({ type: "FeatureCollection", features: filteredFeatures });
 
-      // Jika user memilih spesifik 1 blok, langsung tampilkan detail & zoom ke blok tersebut
+      // Jika user memilih spesifik 1 blok
       if (blokVal !== 'ALL' && filteredFeatures.length === 1) {
         showBlokDetail(filteredFeatures[0].properties);
         if (geojsonLayer) {
@@ -645,6 +673,9 @@
             }
           });
         }
+      } else if (blokVal === 'ALL') {
+        // Jika kembali ke "Semua Blok", kosongkan panel detail
+        clearBlokDetail();
       }
     }
     
