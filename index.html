@@ -10,9 +10,13 @@
 
   <!-- 2. Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Leaflet Measure CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css" />
 
   <!-- 3. FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
 
   <style>
     /* Custom Scrollbar untuk Sidebar */
@@ -26,6 +30,12 @@
       background: #059669;
       border-radius: 3px;
     }
+        /* Mengganti warna icon measure agar bernuansa hijau */
+    .leaflet-control-measure .leaflet-control-measure-toggle,
+    .leaflet-control-measure .leaflet-control-measure-toggle:hover {
+      background-color: #fff;
+    }
+    .leaflet-measure-resultpopup a.zoomto { display: none !important; }
   </style>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col md:flex-row overflow-hidden font-sans">
@@ -180,6 +190,9 @@
   <!-- 4. Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Leaflet Measure JS -->
+  <script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
+
   <!-- 5. Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -327,6 +340,21 @@
     }
 
     // =========================================================
+    // FITUR PENGUKURAN JARAK & LUAS (LEAFLET MEASURE)
+    // =========================================================
+    const measureControl = new L.Control.Measure({
+      position: 'topleft',           // Posisi tombol di layar (kiri atas)
+      primaryLengthUnit: 'meters',   // Satuan panjang utama (Meter)
+      secondaryLengthUnit: 'kilometers', // Satuan panjang kedua (Kilometer)
+      primaryAreaUnit: 'hectares',   // Satuan luas utama (Hektar) - Cocok untuk kebun
+      secondaryAreaUnit: 'sqmeters', // Satuan luas kedua (Meter Persegi)
+      activeColor: '#059669',        // Warna garis saat sedang mengukur (Hijau Tailwind)
+      completedColor: '#047857'      // Warna garis setelah pengukuran selesai
+    });
+    
+    // Tambahkan alat ukur ke dalam peta
+    measureControl.addTo(map);
+    // =========================================================
     // 3. SAMPLE DATA GEOJSON PERKEBUNAN
     // =========================================================
     const dataPerkebunanGeoJSON = {
@@ -383,6 +411,7 @@
             "YIELD_TON_HA": 15.8,
             "PROD_TOTAL_TON": 505.6,
             "PROD_BULANAN": [35, 38, 40, 42, 45, 48, 46, 43, 41, 40, 42, 45.6]
+      
           },
           "geometry": {
             "type": "Polygon",
