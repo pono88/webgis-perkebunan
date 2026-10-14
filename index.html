@@ -17,6 +17,9 @@
   <!-- 4. FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
+  <!-- 5. PapaParse untuk membaca file CSV -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
   <style>
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #f1f1f1; }
@@ -88,12 +91,18 @@
       </button>
     </div>
 
-    <div class="p-4 overflow-y-auto flex-1 space-y-5">
-      <!-- 1. CASCADING FILTER WILAYAH -->
+    <div class="p-4 overflow-y-auto flex-1 space-y-4">
+      <!-- 1. CASCADING FILTER WILAYAH & TAHUN -->
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-          <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
+          <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah & Waktu
         </h2>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tahun Produksi</label>
+          <select id="filter-tahun" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none font-semibold text-emerald-800">
+            <option value="ALL">-- Tahun Berjalan (YTD) --</option>
+          </select>
+        </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Perusahaan (PT / Company)</label>
           <select id="filter-pt" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
@@ -393,15 +402,17 @@
     });
 
     // =========================================================
-    // 4. DATA GEOJSON & PENGISIAN FILTER OTOMATIS
+    // 4. DATA GEOJSON & HISTORI PRODUKSI CSV BACKEND
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
     let rawGeoJsonData = null; 
+    let csvHistoriData = {}; // Format: { "ID_BLOK": { "2024": {jan:10, feb:12,...}, "2025": {...} } }
+    let availableYears = new Set();
+    let latestYear = null;
 
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
 
-    // Helper Universal untuk membaca atribut peta secara fleksibel
     function getProp(p, keys) {
       for (let key of keys) {
         if (p[key] !== undefined && p[key] !== null && p[key] !== "") {
@@ -411,7 +422,10 @@
       return null;
     }
 
-    // Deteksi otomatis kolom PT / Company
+    function getBlokId(p) {
+      return String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '').trim();
+    }
+
     function getPTValue(properties) {
       for (let key in properties) {
         const lowerKey = key.toLowerCase();
@@ -425,45 +439,103 @@
       return null;
     }
 
-    // Deteksi otomatis kolom Luas / Ha
     function getLuasValue(properties) {
       for (let key in properties) {
         const lowerKey = key.toLowerCase();
         if (lowerKey.includes('luas') || lowerKey.includes('ha')) {
           const val = Number(properties[key]);
-          if (!isNaN(val) && val > 0) {
-            return val;
-          }
+          if (!isNaN(val) && val > 0) return val;
         }
       }
       return 0;
     }
 
-    // Deteksi otomatis kolom Tahun Tanam (mengandung kata 'tahun tanam' / 'thn tanam' tanpa peduli spasi/kapital)
     function getTahunTanamValue(properties) {
       for (let key in properties) {
         const cleanKey = key.toLowerCase().replace(/[\s_]/g, '');
         if (cleanKey.includes('tahuntanam') || cleanKey.includes('thntanam')) {
           const val = properties[key];
-          if (val !== undefined && val !== null && String(val).trim() !== "") {
-            return String(val).trim();
-          }
+          if (val !== undefined && val !== null && String(val).trim() !== "") return String(val).trim();
         }
       }
-      // Fallback cadangan jika tidak ada kata 'tanam'
-      return getProp(properties, ['TAHUN', 'tahun', 'THN', 'thn', 'TAHUN_TANAM', 'tahun_tanam']) || '-';
+      return getProp(properties, ['TAHUN', 'tahun', 'THN', 'thn']) || '-';
     }
 
-    // Deteksi otomatis total produksi dari field atau akumulasi bulanan
-    function getProduksiValue(properties) {
-      let prod = Number(getProp(properties, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'PROD_TON', 'TOTAL_PROD']) || 0);
-      if (prod === 0) {
-        const bulanList = ['JAN','FEB','MAR','APR','MEI','JUN','JUL','AGU','SEP','OKT','NOV','DES'];
-        bulanList.forEach(b => {
-          prod += Number(getProp(properties, [b, b.toLowerCase(), 'PROD_' + b]) || 0);
-        });
+    // Mengambil data produksi bulanan berdasarkan blok dan tahun yang dipilih (atau tahun berjalan/latest)
+    function getProductionDataForBlok(blokId, selectedYear) {
+      const targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
+      
+      if (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) {
+        return csvHistoriData[blokId][targetYear];
       }
-      return prod;
+      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+    }
+
+    // Memuat file CSV backend 'produksi_historis.csv' secara otomatis
+    function loadBackendCsv() {
+      Papa.parse('produksi_historis.csv', {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          csvHistoriData = {};
+          availableYears.clear();
+
+          results.data.forEach(row => {
+            let blokId = '';
+            let tahun = '';
+            
+            // Deteksi kolom kunci dari CSV
+            for (let k in row) {
+              const lk = k.toLowerCase();
+              if (lk.includes('blok') || lk.includes('block') || lk.includes('id_blok')) {
+                blokId = String(row[k]).trim();
+              }
+              if (lk.includes('tahun') || lk.includes('year')) {
+                tahun = String(row[k]).trim();
+              }
+            }
+
+            if (blokId && tahun) {
+              availableYears.add(tahun);
+              if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
+
+              const bulanKeys = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
+              let bulananVals = bulanKeys.map(b => {
+                for (let k in row) {
+                  if (k.toLowerCase().includes(b)) {
+                    return Number(row[k]) || 0;
+                  }
+                }
+                return 0;
+              });
+
+              let totalVal = Number(getProp(row, ['PROD_TOTAL_TON', 'prod_total_ton', 'PRODUKSI', 'produksi', 'TOTAL'])) || bulananVals.reduce((a, b) => a + b, 0);
+
+              csvHistoriData[blokId][tahun] = {
+                bulanan: bulananVals,
+                total: totalVal
+              };
+            }
+          });
+
+          // Tentukan tahun berjalan (tahun terbaru dari data CSV)
+          const sortedYears = Array.from(availableYears).sort();
+          latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
+
+          // Isi dropdown filter tahun
+          const tahunSelect = document.getElementById('filter-tahun');
+          tahunSelect.innerHTML = '<option value="ALL">-- Tahun Berjalan (YTD) --</option>';
+          sortedYears.forEach(y => {
+            tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`;
+          });
+
+          if (rawGeoJsonData) renderMapAndKPI(rawGeoJsonData);
+        },
+        error: function(err) {
+          console.warn("File produksi_historis.csv tidak ditemukan di backend, menggunakan data bawaan GeoJSON.");
+        }
+      });
     }
 
     function populateDropdowns(featuresList) {
@@ -477,7 +549,7 @@
         const pt = getPTValue(p);
         const est = getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']);
         const afd = getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']);
-        const blok = getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']);
+        const blok = getBlokId(p);
 
         if (pt) ptSet.add(pt);
         if (est) estSet.add(est);
@@ -523,29 +595,30 @@
         chartInstance.destroy();
         chartInstance = null;
       }
-      // Kosongkan kanvas chart
       const ctx = document.getElementById('chartProduksi').getContext('2d');
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
 
     function showBlokDetail(prop) {
-      const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '-';
+      const blokId = getBlokId(prop);
+      const selectedYear = document.getElementById('filter-tahun').value;
       const thnTan = getTahunTanamValue(prop);
       const luasHa = getLuasValue(prop);
       const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
-      const totalProd = getProduksiValue(prop);
       
+      const prodInfo = getProductionDataForBlok(blokId, selectedYear);
+      const totalProd = prodInfo.total;
       const yieldTon = luasHa > 0 ? (totalProd / luasHa) : 0;
 
-      document.getElementById('detail-blok-id').innerText = `Blok ${idBlok}`;
+      document.getElementById('detail-blok-id').innerText = `Blok ${blokId}`;
       document.getElementById('detail-blok-id').className = 'bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono';
       document.getElementById('detail-tt').innerText = thnTan;
       document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
       document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
       document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
 
-      let dataBulanan = prop.PROD_BULANAN || prop.prod_bulanan || prop.produksi_bulanan;
-      if (!Array.isArray(dataBulanan)) {
+      let dataBulanan = prodInfo.bulanan;
+      if (dataBulanan.every(v => v === 0)) {
         dataBulanan = [
           Number(getProp(prop, ['JAN', 'jan', 'PROD_01']) || 0),
           Number(getProp(prop, ['FEB', 'feb', 'PROD_02']) || 0),
@@ -574,27 +647,29 @@
 
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
+      const selectedYear = document.getElementById('filter-tahun').value;
       
       geojsonLayer = L.geoJSON(dataToRender, {
         style: f => {
           const p = f.properties;
+          const blokId = getBlokId(p);
           const l = getLuasValue(p);
-          const prod = getProduksiValue(p);
-          const yieldTon = l > 0 ? (prod / l) : 0;
+          const prodInfo = getProductionDataForBlok(blokId, selectedYear);
+          const yieldTon = l > 0 ? (prodInfo.total / l) : 0;
           return { fillColor: getColor(yieldTon), weight: 1.5, color: '#fff', fillOpacity: 0.75 };
         },
         onEachFeature: (f, layer) => {
           const prop = f.properties;
-          const idBlok = getProp(prop, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '-';
+          const blokId = getBlokId(prop);
           const l = getLuasValue(prop);
-          const prod = getProduksiValue(prop);
-          const yieldTon = l > 0 ? (prod / l) : 0;
+          const prodInfo = getProductionDataForBlok(blokId, selectedYear);
+          const yieldTon = l > 0 ? (prodInfo.total / l) : 0;
           
-          layer.bindPopup(`<b>Blok ${idBlok}</b><br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
+          layer.bindPopup(`<b>Blok ${blokId}</b><br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
           
           layer.on('click', (e) => {
             if (isDeleteMode) { e.target.closePopup(); return; }
-            document.getElementById('filter-blok').value = idBlok;
+            document.getElementById('filter-blok').value = blokId;
             showBlokDetail(prop);
           });
         }
@@ -603,12 +678,13 @@
       let tLuas = 0, tProd = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
         const p = f.properties;
+        const blokId = getBlokId(p);
         const l = getLuasValue(p);
-        const prod = getProduksiValue(p);
+        const prodInfo = getProductionDataForBlok(blokId, selectedYear);
         const sph = Number(getProp(p, ['SPH', 'sph', 'POKOK_HA']) || 0);
 
         tLuas += l;
-        tProd += prod;
+        tProd += prodInfo.total;
         totalSphSum += sph;
         count++;
       });
@@ -623,7 +699,7 @@
     }
 
     // =========================================================
-    // 5. FILTER LOGIC (CASCADING & PENCARIAN BLOK)
+    // 5. FILTER LOGIC
     // =========================================================
     function applyFilter() {
       if (!rawGeoJsonData) return;
@@ -638,7 +714,7 @@
         const pt = String(getPTValue(p) || 'ALL');
         const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
         const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
-        const idBlok = String(getProp(p, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']) || '');
+        const idBlok = getBlokId(p);
 
         const matchPt = (ptVal === 'ALL' || pt === ptVal);
         const matchEst = (estVal === 'ALL' || est === estVal);
@@ -661,12 +737,11 @@
       document.getElementById('filter-blok').value = blokVal;
       renderMapAndKPI({ type: "FeatureCollection", features: filteredFeatures });
 
-      // Jika user memilih spesifik 1 blok
       if (blokVal !== 'ALL' && filteredFeatures.length === 1) {
         showBlokDetail(filteredFeatures[0].properties);
         if (geojsonLayer) {
           geojsonLayer.eachLayer(layer => {
-            const bId = getProp(layer.feature.properties, ['ID_BLOK', 'id_blok', 'Name', 'BLOK', 'blok', 'KODE_BLOK', 'BLOCK']);
+            const bId = getBlokId(layer.feature.properties);
             if (bId === blokVal) {
               map.fitBounds(layer.getBounds(), { maxZoom: 16 });
               layer.openPopup();
@@ -674,17 +749,16 @@
           });
         }
       } else if (blokVal === 'ALL') {
-        // Jika kembali ke "Semua Blok", kosongkan panel detail
         clearBlokDetail();
       }
     }
     
-    ['filter-pt', 'filter-estate', 'filter-afdeling', 'filter-blok'].forEach(id => {
+    ['filter-tahun', 'filter-pt', 'filter-estate', 'filter-afdeling', 'filter-blok'].forEach(id => {
       document.getElementById(id).addEventListener('change', applyFilter);
     });
 
     // =========================================================
-    // 6. MEMANGGIL FILE GEOJSON EKSTERNAL (test.json)
+    // 6. MEMANGGIL FILE GEOJSON & CSV BACKEND
     // =========================================================
     fetch('test.json')
       .then(response => {
@@ -694,7 +768,7 @@
       .then(data => {
         rawGeoJsonData = data; 
         populateDropdowns(rawGeoJsonData.features); 
-        renderMapAndKPI(rawGeoJsonData);      
+        loadBackendCsv(); // Muat data histori produksi dari backend
         
         if (geojsonLayer && geojsonLayer.getBounds().isValid()) {
           map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
