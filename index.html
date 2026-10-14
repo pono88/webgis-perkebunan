@@ -115,6 +115,7 @@
           <div class="flex justify-between"><span>Luas TM:</span> <b id="detail-luas" class="text-gray-900">- Ha</b></div>
           <div class="flex justify-between"><span>Jumlah Pokok:</span> <b id="detail-sph" class="text-gray-900">- Pokok/Ha</b></div>
           <div class="flex justify-between"><span>Yield:</span> <b id="detail-yield" class="text-emerald-700 font-bold">- Ton/Ha</b></div>
+          <div class="flex justify-between"><span>BJR:</span> <b id="detail-bjr" class="text-blue-700 font-bold">- Kg/Jjg</b></div>
         </div>
         <div>
           <p class="text-[11px] font-semibold text-gray-700 mb-1">Tren Produksi Bulanan (Ton)</p>
@@ -210,7 +211,7 @@
 
 
     // =========================================================
-    // STATE DATA & PARSER CSV DENGAN HEADER
+    // STATE DATA & PARSER CSV DENGAN AKUMULASI BJR
     // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
@@ -269,7 +270,7 @@
       if (csvHistoriData[cleanId] && Object.keys(csvHistoriData[cleanId]).length > 0) {
         return csvHistoriData[cleanId][Object.keys(csvHistoriData[cleanId])[0]];
       }
-      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0, totalJjg: 0 };
     }
 
     function processCsvData(dataRows) {
@@ -292,9 +293,8 @@
       };
 
       dataRows.forEach(row => {
-        let rawBlok = '', tahun = '', bulanStr = '', tonVal = 0;
+        let rawBlok = '', tahun = '', bulanStr = '', tonVal = 0, jjgVal = 0;
 
-        // Pembacaan Objek Hasil Header
         for (let k in row) {
           let ck = cleanKey(k);
           let val = String(row[k] || '').trim();
@@ -307,6 +307,8 @@
             bulanStr = val.toLowerCase();
           } else if (ck === 'ton' || (ck.includes('ton') && !ck.includes('jjg') && !ck.includes('janjang'))) {
             tonVal = parseAngka(val);
+          } else if (ck.includes('jjg') || ck.includes('janjang') || ck === 'pck') {
+            jjgVal = parseAngka(val);
           }
         }
 
@@ -315,6 +317,7 @@
         if (!tahun && row[1]) tahun = row[1];
         if (!bulanStr && row[2]) bulanStr = String(row[2]).toLowerCase().trim();
         if (tonVal === 0 && row[3]) tonVal = parseAngka(row[3]);
+        if (jjgVal === 0 && row[4]) jjgVal = parseAngka(row[4]);
 
         if (rawBlok && tahun) {
           let blokId = cleanBlokId(rawBlok);
@@ -322,10 +325,11 @@
           
           if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
           if (!csvHistoriData[blokId][tahun]) {
-            csvHistoriData[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+            csvHistoriData[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0, totalJjg: 0 };
           }
 
           csvHistoriData[blokId][tahun].total += tonVal;
+          csvHistoriData[blokId][tahun].totalJjg += jjgVal;
 
           let bIdx = -1;
           if (bulanStr) {
@@ -374,7 +378,7 @@
     function loadBackendCsv() {
       Papa.parse('produksi_historis.csv?v=' + Date.now(), {
         download: true,
-        header: true, // Membaca header baris pertama
+        header: true,
         skipEmptyLines: true,
         complete: function(results) {
           processCsvData(results.data);
@@ -403,9 +407,10 @@
           let l = getLuasValue(prop);
           let prodInfo = getProductionDataForBlok(blokId, selectedYear);
           let yieldTon = l > 0 ? (prodInfo.total / l) : 0;
+          let bjr = prodInfo.totalJjg > 0 ? ((prodInfo.total * 1000) / prodInfo.totalJjg) : 0;
           
           let targetLblYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : (latestYear || 'YTD');
-          layer.bindPopup(`<b>Blok ${blokId}</b><br>Tahun: ${targetLblYear}<br>Prod: ${prodInfo.total.toFixed(2)} Ton<br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
+          layer.bindPopup(`<b>Blok ${blokId}</b><br>Tahun: ${targetLblYear}<br>Prod: ${prodInfo.total.toFixed(2)} Ton<br>Yield: ${yieldTon.toFixed(2)} Ton/Ha<br>BJR: ${bjr.toFixed(2)} Kg/Jjg`);
           
           layer.on('click', () => {
             document.getElementById('filter-blok').value = blokId;
@@ -444,6 +449,9 @@
       let luasHa = getLuasValue(prop);
       let prodInfo = getProductionDataForBlok(blokId, selYear);
       let yieldTon = luasHa > 0 ? (prodInfo.total / luasHa) : 0;
+      
+      // Rumus BJR: (Total Ton * 1000) / Total Janjang => Kg/Jjg
+      let bjr = prodInfo.totalJjg > 0 ? ((prodInfo.total * 1000) / prodInfo.totalJjg) : 0;
       let targetLblYear = (selYear && selYear !== 'ALL') ? selYear : (latestYear || '-');
 
       document.getElementById('detail-blok-id').innerText = `Blok ${blokId} (${targetLblYear})`;
@@ -451,6 +459,7 @@
       document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
       document.getElementById('detail-sph').innerText = `${Number(getPropByFuzzyKey(prop, ['sph', 'pokokha'])) || 0} Pokok/Ha`;
       document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
+      document.getElementById('detail-bjr').innerText = `${bjr.toFixed(2)} Kg/Jjg`;
 
       if (chartInstance) chartInstance.destroy();
       chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
