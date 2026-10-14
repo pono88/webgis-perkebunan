@@ -5,33 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebGIS Monitoring Produksi Perkebunan</title>
 
-  <!-- 1. Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- 2. Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-
-  <!-- 3. Leaflet Measure CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.css" />
-
-  <!-- 4. FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
-  <!-- 5. PapaParse untuk membaca file CSV -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
   <style>
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #f1f1f1; }
     ::-webkit-scrollbar-thumb { background: #059669; border-radius: 3px; }
-    
     .leaflet-control-measure .leaflet-control-measure-toggle { background-color: #fff; }
     .leaflet-measure-resultpopup a.zoomto { display: none !important; }
-
-    /* PERBAIKAN KOORDINAT MELOMPAT */
     .leaflet-container svg { max-width: none !important; max-height: none !important; display: inline-block; vertical-align: baseline; }
     .leaflet-container svg path { pointer-events: auto; }
-
     @keyframes pulse {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
       70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
@@ -42,46 +29,30 @@
 </head>
 <body class="bg-gray-100 h-screen w-full overflow-hidden font-sans relative">
 
-  <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Buka Menu">
+  <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center">
     <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
   </button>
 
   <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
-    <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya">
-      <i class="fa-solid fa-location-crosshairs text-lg"></i>
-    </button>
-    <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)">
-      <i class="fa-solid fa-route text-lg" id="track-icon"></i>
-    </button>
-    <button id="btn-add-point" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Tandai Area (Titik)">
-      <i class="fa-solid fa-map-pin text-lg"></i>
-    </button>
-    <button id="btn-export" class="bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Export Jejak & Titik (GeoJSON)">
-      <i class="fa-solid fa-download text-lg"></i>
-    </button>
-    <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)">
-      <i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i>
-    </button>
+    <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya"><i class="fa-solid fa-location-crosshairs text-lg"></i></button>
+    <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)"><i class="fa-solid fa-route text-lg" id="track-icon"></i></button>
+    <button id="btn-add-point" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Tandai Area (Titik)"><i class="fa-solid fa-map-pin text-lg"></i></button>
+    <button id="btn-export" class="bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Export Jejak & Titik (GeoJSON)"><i class="fa-solid fa-download text-lg"></i></button>
+    <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)"><i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i></button>
   </div>
 
   <aside id="sidebar" class="fixed top-0 left-0 z-[3000] h-full w-80 md:w-96 bg-white shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-r border-gray-200">
     <div class="p-4 bg-emerald-800 text-white flex items-center justify-between">
       <div>
-        <h1 class="font-bold text-base flex items-center gap-2">
-          <i class="fa-solid fa-tree text-emerald-400"></i> WebGIS Perkebunan
-        </h1>
+        <h1 class="font-bold text-base flex items-center gap-2"><i class="fa-solid fa-tree text-emerald-400"></i> WebGIS Perkebunan</h1>
         <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
       </div>
-      <button id="btn-close-sidebar" class="text-white hover:text-emerald-300 transition-colors p-1" title="Tutup Menu">
-        <i class="fa-solid fa-xmark text-2xl"></i>
-      </button>
+      <button id="btn-close-sidebar" class="text-white hover:text-emerald-300 transition-colors p-1" title="Tutup Menu"><i class="fa-solid fa-xmark text-2xl"></i></button>
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-4">
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
-        <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-          <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah & Waktu
-        </h2>
+        <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah & Waktu</h2>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Tahun Produksi</label>
           <select id="filter-tahun" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none font-semibold text-emerald-800">
@@ -90,37 +61,27 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Perusahaan (PT / Company)</label>
-          <select id="filter-pt" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
-            <option value="ALL">-- Semua PT --</option>
-          </select>
+          <select id="filter-pt" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none"><option value="ALL">-- Semua PT --</option></select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Estate</label>
-          <select id="filter-estate" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
-            <option value="ALL">-- Semua Estate --</option>
-          </select>
+          <select id="filter-estate" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none"><option value="ALL">-- Semua Estate --</option></select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Afdeling</label>
-          <select id="filter-afdeling" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none">
-            <option value="ALL">-- Semua Afdeling --</option>
-          </select>
+          <select id="filter-afdeling" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none"><option value="ALL">-- Semua Afdeling --</option></select>
         </div>
       </section>
 
       <section>
         <label class="block text-xs font-medium text-gray-600 mb-1">Pilih / Cari Blok</label>
         <div class="relative">
-          <select id="filter-blok" class="w-full text-xs bg-white border border-gray-300 rounded-lg p-2.5 outline-none">
-            <option value="ALL">-- Semua Blok --</option>
-          </select>
+          <select id="filter-blok" class="w-full text-xs bg-white border border-gray-300 rounded-lg p-2.5 outline-none"><option value="ALL">-- Semua Blok --</option></select>
         </div>
       </section>
 
       <section>
-        <h2 class="text-xs font-bold text-gray-700 uppercase mb-2 flex items-center gap-1.5">
-          <i class="fa-solid fa-chart-line text-emerald-600"></i> Ringkasan KPI
-        </h2>
+        <h2 class="text-xs font-bold text-gray-700 uppercase mb-2 flex items-center gap-1.5"><i class="fa-solid fa-chart-line text-emerald-600"></i> Ringkasan KPI</h2>
         <div class="grid grid-cols-2 gap-2.5">
           <div class="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
             <p class="text-[10px] text-emerald-700">Total Produksi</p>
@@ -169,135 +130,21 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <script>
+    // UI Toggle
     const sidebar = document.getElementById('sidebar');
-    const btnToggle = document.getElementById('btn-sidebar-toggle');
-    const btnClose = document.getElementById('btn-close-sidebar');
+    document.getElementById('btn-sidebar-toggle').addEventListener('click', () => { sidebar.classList.remove('-translate-x-full'); });
+    document.getElementById('btn-close-sidebar').addEventListener('click', () => { sidebar.classList.add('-translate-x-full'); });
 
-    btnToggle.addEventListener('click', () => { sidebar.classList.remove('-translate-x-full'); });
-    btnClose.addEventListener('click', () => { sidebar.classList.add('-translate-x-full'); });
-
+    // Map Init
     const map = L.map('map', { zoomControl: false }).setView([-2.21, 113.92], 13);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
-    const esriSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
-    
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    const esriSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
     L.control.layers({ "Satelit (Esri)": esriSatelit, "OpenStreetMap": osm }, null, { position: 'topright' }).addTo(map);
-    map.addLayer(esriSatelit);
+    
+    try { new L.Control.Measure({ position: 'topright', primaryLengthUnit: 'meters', primaryAreaUnit: 'hectares', activeColor: '#059669', completedColor: '#047857' }).addTo(map); } catch (e) {}
 
-    try {
-      const measureControl = new L.Control.Measure({ position: 'topright', primaryLengthUnit: 'meters', secondaryLengthUnit: 'kilometers', primaryAreaUnit: 'hectares', secondaryAreaUnit: 'sqmeters', activeColor: '#059669', completedColor: '#047857' });
-      measureControl.addTo(map);
-    } catch (error) {}
-
-    // ALAT LAPANGAN ...
-    let userMarker = null, accuracyCircle = null;
-    let isTracking = false, isFirstLocation = true, isDeleteMode = false;
-    const drawnFieldItems = L.featureGroup().addTo(map);
-    let currentTrackLine = null, currentTrackCoords = [];
-
-    const userGpsIcon = L.divIcon({
-      className: 'custom-gps-marker',
-      html: `<div class="w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-lg pulse-animation"></div>`,
-      iconSize: [16, 16], iconAnchor: [8, 8]
-    });
-
-    document.getElementById('btn-location').addEventListener('click', () => {
-      if (isTracking && userMarker) { map.flyTo(userMarker.getLatLng(), 17); } else { map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }); }
-    });
-
-    map.on('locationfound', function (e) {
-      if (!userMarker) { userMarker = L.marker(e.latlng, { icon: userGpsIcon }).addTo(map); accuracyCircle = L.circle(e.latlng, { radius: e.accuracy, color: '#2563eb', fillOpacity: 0.15 }).addTo(map); }
-      else { userMarker.setLatLng(e.latlng); accuracyCircle.setLatLng(e.latlng); accuracyCircle.setRadius(e.accuracy); }
-      
-      if (isTracking) {
-        currentTrackCoords.push(e.latlng);
-        if (!currentTrackLine) { currentTrackLine = L.polyline(currentTrackCoords, { color: '#ef4444', weight: 4 }).addTo(drawnFieldItems); }
-        else { currentTrackLine.setLatLngs(currentTrackCoords); }
-        if (isFirstLocation) { map.flyTo(e.latlng, 17); isFirstLocation = false; } else { map.panTo(e.latlng); }
-      }
-    });
-
-    document.getElementById('btn-track').addEventListener('click', function () {
-      if (!isTracking) {
-        isTracking = true; isFirstLocation = true; map.locate({ setView: false, watch: true, enableHighAccuracy: true });
-        this.classList.add('text-red-600', 'bg-red-50'); document.getElementById('track-icon').className = 'fa-solid fa-stop text-lg';
-      } else {
-        map.stopLocate(); currentTrackLine = null; currentTrackCoords = []; isTracking = false;
-        this.classList.remove('text-red-600', 'bg-red-50'); document.getElementById('track-icon').className = 'fa-solid fa-route text-lg';
-      }
-    });
-
-    document.getElementById('btn-add-point').addEventListener('click', () => {
-      let pinLocation = userMarker ? userMarker.getLatLng() : map.getCenter();
-      const pointName = prompt("Nama titik:", "Area Peninjauan");
-      if (pointName) {
-        const marker = L.marker(pinLocation).addTo(drawnFieldItems);
-        marker.bindPopup(`<b>${pointName.trim()}</b>`).openPopup();
-      }
-    });
-
-    document.getElementById('btn-export').addEventListener('click', () => {
-      const geojsonData = drawnFieldItems.toGeoJSON();
-      if (geojsonData.features.length === 0) return alert("Belum ada rute atau titik lapangan.");
-      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = "Data_Lapangan_WebGIS.geojson";
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    });
-
-    const btnClearLayers = document.getElementById('btn-clear-layers');
-    const mapContainer = document.getElementById('map');
-
-    btnClearLayers.addEventListener('click', () => {
-      if (drawnFieldItems.getLayers().length === 0 && !isDeleteMode) return alert("Belum ada jejak yang bisa dihapus.");
-      isDeleteMode = !isDeleteMode; 
-      if (isDeleteMode) {
-        btnClearLayers.classList.replace('bg-white', 'bg-red-500'); btnClearLayers.classList.replace('text-gray-700', 'text-white');
-        mapContainer.style.cursor = 'crosshair';
-      } else {
-        btnClearLayers.classList.replace('bg-red-500', 'bg-white'); btnClearLayers.classList.replace('text-white', 'text-gray-700');
-        mapContainer.style.cursor = ''; 
-      }
-    });
-
-    drawnFieldItems.on('click', function(e) {
-      if (isDeleteMode) {
-        if (e.layer.closePopup) e.layer.closePopup(); 
-        if (confirm("Hapus rute/titik ini?")) {
-          drawnFieldItems.removeLayer(e.layer);
-          if (e.layer === currentTrackLine) { currentTrackLine = null; currentTrackCoords = []; }
-        }
-      }
-    });
-
-    // =========================================================
-    // PARSER ANGKA PINTAR
-    // =========================================================
-    function parseAngka(val) {
-      if (val === undefined || val === null || val === '') return 0;
-      if (typeof val === 'number') return val;
-      
-      let str = String(val).trim();
-      const komaCount = (str.match(/,/g) || []).length;
-      const titikCount = (str.match(/\./g) || []).length;
-      
-      if (komaCount === 1 && titikCount === 1) {
-         const komaIdx = str.indexOf(',');
-         const titikIdx = str.indexOf('.');
-         if (titikIdx > komaIdx) { str = str.replace(/,/g, ''); } 
-         else { str = str.replace(/\./g, '').replace(',', '.'); }
-      } else if (komaCount > 1) { str = str.replace(/,/g, '');
-      } else if (titikCount > 1) { str = str.replace(/\./g, '');
-      } else if (komaCount === 1 && titikCount === 0) { str = str.replace(',', '.'); }
-      
-      const num = parseFloat(str);
-      return isNaN(num) ? 0 : num;
-    }
-
-    // =========================================================
-    // LOGIKA PENCOCOKAN MURNI MENGGUNAKAN "ID_BLOK"
-    // =========================================================
+    // DATA STATE
     let geojsonLayer = null;
     let chartInstance = null;
     let rawGeoJsonData = null; 
@@ -305,253 +152,130 @@
     let availableYears = new Set();
     let latestYear = null;
 
+    // Helpers
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
-    function getProp(p, keys) { for (let key of keys) { if (p[key] !== undefined && p[key] !== null && p[key] !== "") return p[key]; } return null; }
-    
-    // Pembersih kata "blok" agar A01 dan Blok A01 tetap match
-    function cleanBlokId(str) {
-      if (!str) return '';
-      return String(str).replace(/BLOK/ig, '').replace(/BLOCK/ig, '').trim().toUpperCase();
-    }
-    
-    // MENCARI SPESIFIK KEY "ID_Blok" DI GEOJSON
-    function getBlokId(p) { 
-      let rawId = '';
-      for (let key in p) {
-        if (key.toLowerCase() === 'id_blok') { // FOKUS KETAT KE NAMA "ID_BLOK"
-          rawId = p[key];
-          break;
-        }
-      }
-      // Fallback sangat tipis jika tidak ada ID_Blok sama sekali
-      if (!rawId) rawId = getProp(p, ['Name', 'BLOK', 'blok', 'KODE_BLOK']);
-      return cleanBlokId(rawId);
-    }
+    function cleanKey(k) { return String(k).toLowerCase().replace(/[^a-z0-9]/g, ''); } // Hapus spasi dan simbol dari string pencarian
+    function cleanBlokId(str) { return String(str || '').replace(/BLOK/ig, '').replace(/BLOCK/ig, '').trim().toUpperCase(); }
 
-    function getPTValue(properties) {
-      for (let key in properties) {
-        if (key.toLowerCase().includes('pt') || key.toLowerCase().includes('company')) {
-          if (properties[key] !== undefined && properties[key] !== null && String(properties[key]).trim() !== "") return String(properties[key]).trim();
-        }
+    function getPropByFuzzyKey(p, targetKeys) {
+      for (let key in p) {
+        let ck = cleanKey(key);
+        if (targetKeys.includes(ck) || targetKeys.some(t => ck.includes(t))) return p[key];
       }
       return null;
     }
 
-    function getLuasValue(properties) {
-      for (let key in properties) {
-        if (key.toLowerCase().includes('luas') || key.toLowerCase().includes('ha')) {
-          const val = Number(properties[key]);
-          if (!isNaN(val) && val > 0) return val;
-        }
-      }
-      return 0;
-    }
+    function getBlokId(p) { return cleanBlokId(getPropByFuzzyKey(p, ['idblok', 'blok', 'block', 'kodeblok'])); }
+    function getPTValue(p) { return getPropByFuzzyKey(p, ['pt', 'company', 'perusahaan']) || null; }
+    function getLuasValue(p) { return Number(getPropByFuzzyKey(p, ['luas', 'ha'])) || 0; }
+    function getTahunTanamValue(p) { return getPropByFuzzyKey(p, ['tahuntanam', 'thntanam', 'tahun']) || '-'; }
 
-    function getTahunTanamValue(properties) {
-      for (let key in properties) {
-        const cleanKey = key.toLowerCase().replace(/[\s_]/g, '');
-        if (cleanKey.includes('tahuntanam') || cleanKey.includes('thntanam')) {
-          if (properties[key]) return String(properties[key]).trim();
-        }
-      }
-      return getProp(properties, ['TAHUN', 'tahun', 'THN', 'thn']) || '-';
+    function parseAngka(val) {
+      if (!val) return 0;
+      if (typeof val === 'number') return val;
+      let str = String(val).trim();
+      let komaCount = (str.match(/,/g) || []).length;
+      let titikCount = (str.match(/\./g) || []).length;
+      if (komaCount === 1 && titikCount === 1) { str = (str.indexOf('.') > str.indexOf(',')) ? str.replace(/,/g, '') : str.replace(/\./g, '').replace(',', '.'); } 
+      else if (komaCount > 1) { str = str.replace(/,/g, ''); } 
+      else if (titikCount > 1) { str = str.replace(/\./g, ''); } 
+      else if (komaCount === 1 && titikCount === 0) { str = str.replace(',', '.'); }
+      return isNaN(parseFloat(str)) ? 0 : parseFloat(str);
     }
 
     function getProductionDataForBlok(blokId, selectedYear) {
-      const targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
-      if (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) {
-        return csvHistoriData[blokId][targetYear];
-      }
-      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+      let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
+      return (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) ? csvHistoriData[blokId][targetYear] : { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
     function filterTonBulananCSV(rowObj) {
       const bulanPendek = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
-      const bulanPanjang = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
-
-      return bulanPendek.map((bp, idx) => {
-        let pjg = bulanPanjang[idx];
+      return bulanPendek.map((bp) => {
         let val = 0;
-        
-        let kandidat = Object.keys(rowObj).filter(k => k.toLowerCase().includes(bp) || k.toLowerCase().includes(pjg));
-        kandidat = kandidat.filter(k => !k.toLowerCase().includes('jjg') && !k.toLowerCase().includes('janjang'));
-
-        if (kandidat.length > 0) {
-          let tonKey = kandidat.find(k => k.toLowerCase().includes('ton') || k.toLowerCase().includes('kg'));
-          if (tonKey) {
-            val = parseAngka(rowObj[tonKey]);
-          } else {
-            val = parseAngka(rowObj[kandidat[0]]);
-          }
+        let keys = Object.keys(rowObj).filter(k => {
+          let ck = cleanKey(k);
+          return ck.includes(bp) && !ck.includes('jjg') && !ck.includes('janjang');
+        });
+        if (keys.length > 0) {
+          let tonKey = keys.find(k => cleanKey(k).includes('ton') || cleanKey(k).includes('kg'));
+          val = parseAngka(rowObj[tonKey || keys[0]]);
         }
         return val;
       });
     }
 
     function loadBackendCsv() {
-      const csvUrl = 'produksi_historis.csv?v=' + new Date().getTime(); 
-
-      Papa.parse(csvUrl, {
+      Papa.parse('produksi_historis.csv?v=' + Date.now(), {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
           csvHistoriData = {};
           availableYears.clear();
-          let matchedCount = 0;
+          let matched = 0;
 
           results.data.forEach(row => {
             let blokId = '', tahun = '';
             
-            // MENCARI SPESIFIK HEADER "ID_Blok" DI CSV
             for (let k in row) {
-              const lk = k.toLowerCase();
-              if (lk === 'id_blok') { // FOKUS KETAT KE HEADER "ID_BLOK"
-                blokId = cleanBlokId(row[k]);
-              }
-              if (lk.includes('tahun') || lk.includes('year')) {
-                tahun = String(row[k]).trim();
-              }
-            }
-            // Fallback tipis (hanya dipakai jika benar-benar tidak ada header ID_Blok)
-            if(!blokId) {
-              for (let k in row) {
-                if (k.toLowerCase() === 'blok' || k.toLowerCase() === 'block' || k.toLowerCase() === 'kode_blok') {
-                    blokId = cleanBlokId(row[k]);
-                }
-              }
+              let ck = cleanKey(k);
+              if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok') blokId = cleanBlokId(row[k]);
+              if (ck.includes('tahun') || ck.includes('year')) tahun = String(row[k]).trim();
             }
 
             if (blokId && tahun) {
               availableYears.add(tahun);
               if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
-
+              
               let bulananVals = filterTonBulananCSV(row);
-              
               let totalVal = 0;
-              let keyTotal = Object.keys(row).find(k => 
-                  (k.toLowerCase().includes('total') || k.toLowerCase().includes('prod')) && 
-                  !k.toLowerCase().includes('jjg') && !k.toLowerCase().includes('janjang') && k.toLowerCase().includes('ton')
-              );
+              let keyTotal = Object.keys(row).find(k => {
+                let ck = cleanKey(k);
+                return (ck.includes('total') || ck.includes('prod')) && !ck.includes('jjg') && !ck.includes('janjang') && ck.includes('ton');
+              });
               
-              if(keyTotal) {
-                  totalVal = parseAngka(row[keyTotal]);
-              } else {
-                  totalVal = bulananVals.reduce((a, b) => a + b, 0);
-              }
+              if(keyTotal) totalVal = parseAngka(row[keyTotal]);
+              else totalVal = bulananVals.reduce((a, b) => a + b, 0);
 
               csvHistoriData[blokId][tahun] = { bulanan: bulananVals, total: totalVal };
-              matchedCount++;
+              matched++;
             }
           });
-          
-          console.log(`Berhasil memproses baris CSV. Kunci Penghubung: ID_Blok`);
 
-          const sortedYears = Array.from(availableYears).sort();
+          if(matched === 0 && results.data.length > 0) {
+              console.warn("PERINGATAN: File CSV berhasil dimuat, tetapi sistem tidak menemukan kolom dengan nama 'ID_Blok' dan 'Tahun'. Header yang terbaca:", Object.keys(results.data[0]));
+          }
+
+          let sortedYears = Array.from(availableYears).sort();
           latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
 
-          const tahunSelect = document.getElementById('filter-tahun');
+          let tahunSelect = document.getElementById('filter-tahun');
           tahunSelect.innerHTML = '<option value="ALL">-- Tahun Berjalan (YTD) --</option>';
-          sortedYears.forEach(y => {
-            tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`;
-          });
+          sortedYears.forEach(y => { tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`; });
 
           if (rawGeoJsonData) applyFilter();
-        },
-        error: function(err) {
-          console.error("Gagal membaca produksi_historis.csv.");
         }
       });
     }
 
-    function populateDropdowns(featuresList) {
-      const ptSet = new Set(), estSet = new Set(), afdSet = new Set(), blokSet = new Set();
-
-      featuresList.forEach(f => {
-        const p = f.properties;
-        const pt = getPTValue(p), est = getProp(p, ['ESTATE', 'estate', 'EST', 'est']), afd = getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd']), blok = getBlokId(p);
-        if (pt) ptSet.add(pt); if (est) estSet.add(est); if (afd) afdSet.add(afd); if (blok) blokSet.add(blok);
-      });
-
-      const ptSel = document.getElementById('filter-pt'), estSel = document.getElementById('filter-estate'), afdSel = document.getElementById('filter-afdeling'), blokSel = document.getElementById('filter-blok');
-      const curPt = ptSel.value, curEst = estSel.value, curAfd = afdSel.value, curBlok = blokSel.value;
-
-      ptSel.innerHTML = '<option value="ALL">-- Semua PT --</option>'; estSel.innerHTML = '<option value="ALL">-- Semua Estate --</option>';
-      afdSel.innerHTML = '<option value="ALL">-- Semua Afdeling --</option>'; blokSel.innerHTML = '<option value="ALL">-- Semua Blok --</option>';
-
-      ptSet.forEach(val => ptSel.innerHTML += `<option value="${val}">${val}</option>`);
-      estSet.forEach(val => estSel.innerHTML += `<option value="${val}">${val}</option>`);
-      afdSet.forEach(val => afdSel.innerHTML += `<option value="${val}">${val}</option>`);
-      blokSet.forEach(val => blokSel.innerHTML += `<option value="${val}">Blok ${val}</option>`);
-
-      ptSel.value = ptSet.has(curPt) ? curPt : 'ALL'; estSel.value = estSet.has(curEst) ? curEst : 'ALL';
-      afdSel.value = afdSet.has(curAfd) ? curAfd : 'ALL'; blokSel.value = blokSet.has(curBlok) ? curBlok : 'ALL';
-    }
-
-    function clearBlokDetail() {
-      document.getElementById('detail-blok-id').innerText = 'Belum Dipilih';
-      document.getElementById('detail-blok-id').className = 'bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded font-mono';
-      document.getElementById('detail-tt').innerText = '-';
-      document.getElementById('detail-luas').innerText = '- Ha';
-      document.getElementById('detail-sph').innerText = '- Pokok/Ha';
-      document.getElementById('detail-yield').innerText = '- Ton/Ha';
-
-      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-      const ctx = document.getElementById('chartProduksi').getContext('2d');
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    }
-
-    function showBlokDetail(prop) {
-      const blokId = getBlokId(prop);
-      const selectedYear = document.getElementById('filter-tahun').value;
-      
-      const thnTan = getTahunTanamValue(prop);
-      const luasHa = getLuasValue(prop);
-      const sphVal = Number(getProp(prop, ['SPH', 'sph', 'POKOK_HA', 'pokok_ha']) || 0);
-      
-      const prodInfo = getProductionDataForBlok(blokId, selectedYear);
-      let yieldTon = luasHa > 0 ? (prodInfo.total / luasHa) : 0;
-      let dataBulanan = prodInfo.bulanan; 
-
-      document.getElementById('detail-blok-id').innerText = `Blok ${blokId}`;
-      document.getElementById('detail-blok-id').className = 'bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono';
-      document.getElementById('detail-tt').innerText = thnTan;
-      document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
-      document.getElementById('detail-sph').innerText = `${sphVal} Pokok/Ha`;
-      document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
-
-      if (chartInstance) chartInstance.destroy();
-      chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
-        type: 'bar',
-        data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: dataBulanan, backgroundColor: '#059669', borderRadius: 4 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-      });
-
-      sidebar.classList.remove('-translate-x-full');
-    }
-
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
-      const selectedYear = document.getElementById('filter-tahun').value;
+      let selectedYear = document.getElementById('filter-tahun').value;
       
       geojsonLayer = L.geoJSON(dataToRender, {
         style: f => {
-          const p = f.properties;
-          const l = getLuasValue(p); 
-          const prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear); 
-          const yieldTon = l > 0 ? (prodInfo.total / l) : 0;
+          let l = getLuasValue(f.properties); 
+          let prodInfo = getProductionDataForBlok(getBlokId(f.properties), selectedYear); 
+          let yieldTon = l > 0 ? (prodInfo.total / l) : 0;
           return { fillColor: getColor(yieldTon), weight: 1.5, color: '#fff', fillOpacity: 0.75 };
         },
         onEachFeature: (f, layer) => {
-          const prop = f.properties;
-          const blokId = getBlokId(prop);
-          const l = getLuasValue(prop);
-          const prodInfo = getProductionDataForBlok(blokId, selectedYear);
-          const yieldTon = l > 0 ? (prodInfo.total / l) : 0;
-          
+          let prop = f.properties;
+          let blokId = getBlokId(prop);
+          let l = getLuasValue(prop);
+          let yieldTon = l > 0 ? (getProductionDataForBlok(blokId, selectedYear).total / l) : 0;
           layer.bindPopup(`<b>Blok ${blokId}</b><br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
-          layer.on('click', (e) => {
-            if (isDeleteMode) { e.target.closePopup(); return; }
+          layer.on('click', () => {
             document.getElementById('filter-blok').value = blokId;
             showBlokDetail(prop);
           });
@@ -560,19 +284,16 @@
 
       let tLuas = 0, tProd = 0, totalSphSum = 0, count = 0;
       dataToRender.features.forEach(f => {
-        const p = f.properties;
-        const l = getLuasValue(p);
-        const prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear);
-        const sph = Number(getProp(p, ['SPH', 'sph', 'POKOK_HA']) || 0);
+        let p = f.properties;
+        let l = getLuasValue(p);
+        let prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear);
+        let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
-        tLuas += l; 
-        tProd += prodInfo.total; 
-        totalSphSum += sph; 
-        count++;
+        tLuas += l; tProd += prodInfo.total; totalSphSum += sph; count++;
       });
 
-      const avgYield = tLuas > 0 ? (tProd / tLuas) : 0;
-      const avgSph = count > 0 ? Math.round(totalSphSum / count) : 0;
+      let avgYield = tLuas > 0 ? (tProd / tLuas) : 0;
+      let avgSph = count > 0 ? Math.round(totalSphSum / count) : 0;
 
       document.getElementById('kpi-produksi').innerText = `${tProd.toFixed(1)} Ton`;
       document.getElementById('kpi-luas').innerText = `${tLuas.toFixed(1)} Ha`;
@@ -580,80 +301,78 @@
       document.getElementById('kpi-sph').innerText = `${avgSph} Pkk/Ha`;
     }
 
+    function showBlokDetail(prop) {
+      let blokId = getBlokId(prop);
+      let selYear = document.getElementById('filter-tahun').value;
+      let luasHa = getLuasValue(prop);
+      let prodInfo = getProductionDataForBlok(blokId, selYear);
+      let yieldTon = luasHa > 0 ? (prodInfo.total / luasHa) : 0;
+
+      document.getElementById('detail-blok-id').innerText = `Blok ${blokId}`;
+      document.getElementById('detail-tt').innerText = getTahunTanamValue(prop);
+      document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
+      document.getElementById('detail-sph').innerText = `${Number(getPropByFuzzyKey(prop, ['sph', 'pokokha'])) || 0} Pokok/Ha`;
+      document.getElementById('detail-yield').innerText = `${yieldTon.toFixed(2)} Ton/Ha`;
+
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
+        type: 'bar',
+        data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: prodInfo.bulanan, backgroundColor: '#059669', borderRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+      sidebar.classList.remove('-translate-x-full');
+    }
+
+    function populateDropdowns(features) {
+      let ptSet = new Set(), estSet = new Set(), afdSet = new Set(), blokSet = new Set();
+      features.forEach(f => {
+        let p = f.properties;
+        let pt = getPTValue(p), est = getPropByFuzzyKey(p, ['estate','est']), afd = getPropByFuzzyKey(p, ['afdeling','afd']), blok = getBlokId(p);
+        if(pt) ptSet.add(pt); if(est) estSet.add(est); if(afd) afdSet.add(afd); if(blok) blokSet.add(blok);
+      });
+
+      let pSel=document.getElementById('filter-pt'), eSel=document.getElementById('filter-estate'), aSel=document.getElementById('filter-afdeling'), bSel=document.getElementById('filter-blok');
+      let cP=pSel.value, cE=eSel.value, cA=aSel.value, cB=bSel.value;
+
+      pSel.innerHTML = '<option value="ALL">-- Semua PT --</option>'; eSel.innerHTML = '<option value="ALL">-- Semua Estate --</option>';
+      aSel.innerHTML = '<option value="ALL">-- Semua Afdeling --</option>'; bSel.innerHTML = '<option value="ALL">-- Semua Blok --</option>';
+
+      ptSet.forEach(v => pSel.innerHTML += `<option value="${v}">${v}</option>`); estSet.forEach(v => eSel.innerHTML += `<option value="${v}">${v}</option>`);
+      afdSet.forEach(v => aSel.innerHTML += `<option value="${v}">${v}</option>`); blokSet.forEach(v => bSel.innerHTML += `<option value="${v}">Blok ${v}</option>`);
+
+      pSel.value = ptSet.has(cP) ? cP : 'ALL'; eSel.value = estSet.has(cE) ? cE : 'ALL'; aSel.value = afdSet.has(cA) ? cA : 'ALL'; bSel.value = blokSet.has(cB) ? cB : 'ALL';
+    }
+
     function applyFilter() {
       if (!rawGeoJsonData) return;
-
-      const ptVal = document.getElementById('filter-pt').value;
-      const estVal = document.getElementById('filter-estate').value;
-      const afdVal = document.getElementById('filter-afdeling').value;
-      const blokVal = document.getElementById('filter-blok').value;
+      let pV = document.getElementById('filter-pt').value, eV = document.getElementById('filter-estate').value, aV = document.getElementById('filter-afdeling').value, bV = document.getElementById('filter-blok').value;
       
-      const filteredFeatures = rawGeoJsonData.features.filter(f => {
-        const p = f.properties;
-        const pt = String(getPTValue(p) || 'ALL');
-        const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
-        const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
-        const idBlok = getBlokId(p);
-
-        const matchPt = (ptVal === 'ALL' || pt === ptVal);
-        const matchEst = (estVal === 'ALL' || est === estVal);
-        const matchAfd = (afdVal === 'ALL' || afd === afdVal);
-        const matchBlok = (blokVal === 'ALL' || idBlok === blokVal);
-
-        return matchPt && matchEst && matchAfd && matchBlok;
+      let filtered = rawGeoJsonData.features.filter(f => {
+        let p = f.properties;
+        return (pV === 'ALL' || String(getPTValue(p)) === pV) && (eV === 'ALL' || String(getPropByFuzzyKey(p, ['estate','est'])) === eV) && (aV === 'ALL' || String(getPropByFuzzyKey(p, ['afdeling','afd'])) === aV) && (bV === 'ALL' || getBlokId(p) === bV);
       });
 
       populateDropdowns(rawGeoJsonData.features.filter(f => {
-        const p = f.properties;
-        const pt = String(getPTValue(p) || 'ALL');
-        const est = String(getProp(p, ['ESTATE', 'estate', 'EST', 'est', 'NM_ESTATE', 'nm_estate']) || 'ALL');
-        const afd = String(getProp(p, ['AFDELING', 'afdeling', 'AFD', 'afd', 'AFD_']) || 'ALL');
-        return (ptVal === 'ALL' || pt === ptVal) && (estVal === 'ALL' || est === estVal) && (afdVal === 'ALL' || afd === afdVal);
+        let p = f.properties;
+        return (pV === 'ALL' || String(getPTValue(p)) === pV) && (eV === 'ALL' || String(getPropByFuzzyKey(p, ['estate','est'])) === eV) && (aV === 'ALL' || String(getPropByFuzzyKey(p, ['afdeling','afd'])) === aV);
       }));
 
-      document.getElementById('filter-blok').value = blokVal;
-      renderMapAndKPI({ type: "FeatureCollection", features: filteredFeatures });
+      document.getElementById('filter-blok').value = bV;
+      renderMapAndKPI({ type: "FeatureCollection", features: filtered });
 
-      if (blokVal !== 'ALL' && filteredFeatures.length === 1) {
-        showBlokDetail(filteredFeatures[0].properties);
-        if (geojsonLayer) {
-          geojsonLayer.eachLayer(layer => {
-            if (getBlokId(layer.feature.properties) === blokVal) {
-              map.fitBounds(layer.getBounds(), { maxZoom: 16 }); layer.openPopup();
-            }
-          });
-        }
-      } else if (blokVal === 'ALL') {
-        clearBlokDetail();
+      if (bV !== 'ALL' && filtered.length === 1) {
+        showBlokDetail(filtered[0].properties);
+        if (geojsonLayer) { geojsonLayer.eachLayer(l => { if (getBlokId(l.feature.properties) === bV) { map.fitBounds(l.getBounds(), { maxZoom: 16 }); l.openPopup(); }}); }
       }
     }
     
-    ['filter-tahun', 'filter-pt', 'filter-estate', 'filter-afdeling', 'filter-blok'].forEach(id => {
-      document.getElementById(id).addEventListener('change', applyFilter);
-    });
+    ['filter-tahun', 'filter-pt', 'filter-estate', 'filter-afdeling', 'filter-blok'].forEach(id => document.getElementById(id).addEventListener('change', applyFilter));
 
-    // =========================================================
-    // AWALAN: MEMANGGIL GEOJSON LALU MENGAMBIL CSV
-    // =========================================================
-    fetch('test.json')
-      .then(response => {
-        if (!response.ok) throw new Error("File test.json tidak ditemukan.");
-        return response.json();
-      })
-      .then(data => {
-        rawGeoJsonData = data; 
-        populateDropdowns(rawGeoJsonData.features); 
-        
-        renderMapAndKPI(rawGeoJsonData);      
-        if (geojsonLayer && geojsonLayer.getBounds().isValid()) {
-          map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
-        }
-
-        loadBackendCsv(); 
-      })
-      .catch(error => {
-        console.error("Gagal memuat poligon:", error);
-      });
+    fetch('test.json').then(r => r.json()).then(data => {
+      rawGeoJsonData = data; populateDropdowns(data.features); renderMapAndKPI(data);
+      if (geojsonLayer) map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+      loadBackendCsv(); 
+    }).catch(e => alert("Gagal memuat test.json. Pastikan lewat Local Server (Live Server)."));
   </script>
 </body>
 </html>
