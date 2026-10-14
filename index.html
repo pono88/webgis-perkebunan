@@ -11,24 +11,20 @@
   <!-- 2. Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <!-- 3. Leaflet Measure CSS (Diperbaiki ke CDNJS yang stabil) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-measure/3.1.0/leaflet-measure.min.css" />
+  <!-- 3. Leaflet Measure CSS (Versi Spesifik Terkunci) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.css" />
 
   <!-- 4. FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
   <style>
-    /* Custom Scrollbar untuk Sidebar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #f1f1f1; }
     ::-webkit-scrollbar-thumb { background: #059669; border-radius: 3px; }
     
-    /* Mengganti warna icon measure agar bernuansa hijau */
-    .leaflet-control-measure .leaflet-control-measure-toggle,
-    .leaflet-control-measure .leaflet-control-measure-toggle:hover { background-color: #fff; }
+    .leaflet-control-measure .leaflet-control-measure-toggle { background-color: #fff; }
     .leaflet-measure-resultpopup a.zoomto { display: none !important; }
 
-    /* CSS untuk efek Pulse pada Marker GPS */
     @keyframes pulse {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
       70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
@@ -55,7 +51,7 @@
         </h1>
         <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
       </div>
-      <span class="bg-emerald-900 text-emerald-300 text-[10px] font-semibold px-2 py-1 rounded">v1.0</span>
+      <span class="bg-emerald-900 text-emerald-300 text-[10px] font-semibold px-2 py-1 rounded">v1.1</span>
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
@@ -146,4 +142,163 @@
   <!-- ========================================================= -->
   <!-- AREA MAPS (PANEL KANAN)                                   -->
   <!-- ========================================================= -->
-  <main class="
+  <!-- Diperbaiki: Ditambahkan "absolute inset-0" untuk menjamin peta tidak terpotong ukurannya -->
+  <main class="flex-1 h-full relative z-10">
+    <div id="map" class="absolute inset-0 w-full h-full"></div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- JAVASCRIPT LIBRARIES                                      -->
+  <!-- ========================================================= -->
+  <!-- 1. Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- 2. Leaflet Measure JS (Versi Spesifik) -->
+  <script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.js"></script>
+  
+  <!-- 3. Chart JS -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- LOGIKA WEBGIS JAVASCRIPT -->
+  <script>
+    // =========================================================
+    // 1. INISIALISASI PETA & BASEMAP
+    // =========================================================
+    const map = L.map('map').setView([-2.21, 113.92], 13);
+
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
+    const esriSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
+    
+    L.control.layers({ "OpenStreetMap": osm, "Satelit (Esri)": esriSatelit }, null, { position: 'topright' }).addTo(map);
+
+    // =========================================================
+    // 2. FITUR PENGUKURAN (DENGAN PENGAMAN TRY...CATCH)
+    // =========================================================
+    try {
+      const measureControl = new L.Control.Measure({
+        position: 'topleft',
+        primaryLengthUnit: 'meters',
+        secondaryLengthUnit: 'kilometers',
+        primaryAreaUnit: 'hectares',
+        secondaryAreaUnit: 'sqmeters',
+        activeColor: '#059669',
+        completedColor: '#047857'
+      });
+      measureControl.addTo(map);
+      console.log("Alat ukur berhasil dimuat.");
+    } catch (error) {
+      console.error("Gagal memuat plugin pengukur jarak (leaflet-measure):", error);
+    }
+
+    // =========================================================
+    // 3. FITUR GEOLOCATION (GPS)
+    // =========================================================
+    let userMarker = null, accuracyCircle = null, isTracking = false;
+    const userGpsIcon = L.divIcon({
+      className: 'custom-gps-marker',
+      html: `<div class="w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-lg pulse-animation"></div>`,
+      iconSize: [16, 16], iconAnchor: [8, 8]
+    });
+
+    map.on('locationfound', function (e) {
+      if (!userMarker) {
+        userMarker = L.marker(e.latlng, { icon: userGpsIcon }).addTo(map);
+        accuracyCircle = L.circle(e.latlng, { radius: e.accuracy, color: '#2563eb', fillOpacity: 0.15 }).addTo(map);
+      } else {
+        userMarker.setLatLng(e.latlng);
+        accuracyCircle.setLatLng(e.latlng);
+        accuracyCircle.setRadius(e.accuracy);
+      }
+      if (!isTracking) { map.flyTo(e.latlng, 17); isTracking = true; }
+    });
+
+    map.on('locationerror', function (e) {
+      alert("Gagal mendapatkan lokasi GPS.");
+      isTracking = false;
+    });
+
+    document.getElementById('btn-gps').addEventListener('click', function () {
+      if (!isTracking) {
+        map.locate({ setView: false, watch: true, enableHighAccuracy: true });
+        this.classList.add('text-emerald-600', 'bg-emerald-50');
+      } else {
+        map.stopLocate();
+        if (userMarker) map.removeLayer(userMarker);
+        if (accuracyCircle) map.removeLayer(accuracyCircle);
+        userMarker = null; accuracyCircle = null; isTracking = false;
+        this.classList.remove('text-emerald-600', 'bg-emerald-50');
+      }
+    });
+
+    // =========================================================
+    // 4. DATA GEOJSON & LOGIKA PETA TEMATIK
+    // =========================================================
+    let geojsonLayer = null;
+    let chartInstance = null;
+
+    const dataPerkebunanGeoJSON = {
+      "type": "FeatureCollection",
+      "features": [
+        { "type": "Feature", "properties": { "ID_BLOK": "A01", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_ALPHA", "AFDELING": "AFD_1", "TAHUN_TANAM": 2017, "LUAS_HA": 30.5, "SPH": 136, "YIELD_TON_HA": 24.2, "PROD_TOTAL_TON": 738.1, "PROD_BULANAN": [55, 60, 58, 62, 65, 70, 68, 64, 62, 59, 58, 57.1] }, "geometry": { "type": "Polygon", "coordinates": [[[113.90, -2.20], [113.91, -2.20], [113.91, -2.21], [113.90, -2.21], [113.90, -2.20]]] } },
+        { "type": "Feature", "properties": { "ID_BLOK": "A02", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_ALPHA", "AFDELING": "AFD_1", "TAHUN_TANAM": 2018, "LUAS_HA": 28.0, "SPH": 135, "YIELD_TON_HA": 19.5, "PROD_TOTAL_TON": 546.0, "PROD_BULANAN": [40, 42, 45, 48, 50, 52, 49, 46, 44, 43, 42, 45] }, "geometry": { "type": "Polygon", "coordinates": [[[113.91, -2.20], [113.92, -2.20], [113.92, -2.21], [113.91, -2.21], [113.91, -2.20]]] } },
+        { "type": "Feature", "properties": { "ID_BLOK": "B01", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_ALPHA", "AFDELING": "AFD_2", "TAHUN_TANAM": 2019, "LUAS_HA": 32.0, "SPH": 130, "YIELD_TON_HA": 15.8, "PROD_TOTAL_TON": 505.6, "PROD_BULANAN": [35, 38, 40, 42, 45, 48, 46, 43, 41, 40, 42, 45.6] }, "geometry": { "type": "Polygon", "coordinates": [[[113.90, -2.21], [113.91, -2.21], [113.91, -2.22], [113.90, -2.22], [113.90, -2.21]]] } },
+        { "type": "Feature", "properties": { "ID_BLOK": "C01", "PT": "PT_DHARMA_AGRO", "ESTATE": "ESTATE_BETA", "AFDELING": "AFD_3", "TAHUN_TANAM": 2020, "LUAS_HA": 25.0, "SPH": 128, "YIELD_TON_HA": 12.4, "PROD_TOTAL_TON": 310.0, "PROD_BULANAN": [20, 22, 24, 25, 28, 30, 29, 27, 26, 25, 26, 28] }, "geometry": { "type": "Polygon", "coordinates": [[[113.92, -2.21], [113.93, -2.21], [113.93, -2.22], [113.92, -2.22], [113.92, -2.21]]] } }
+      ]
+    };
+
+    function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
+
+    function loadGeoJSON(data) {
+      if (geojsonLayer) map.removeLayer(geojsonLayer);
+      
+      geojsonLayer = L.geoJSON(data, {
+        style: f => ({ fillColor: getColor(f.properties.YIELD_TON_HA), weight: 1.5, color: '#fff', fillOpacity: 0.75 }),
+        onEachFeature: (f, layer) => {
+          layer.bindPopup(`<b>Blok ${f.properties.ID_BLOK}</b><br>Yield: ${f.properties.YIELD_TON_HA} Ton/Ha`);
+          layer.on('click', () => {
+            document.getElementById('detail-blok-id').innerText = `Blok ${f.properties.ID_BLOK}`;
+            document.getElementById('detail-tt').innerText = f.properties.TAHUN_TANAM;
+            document.getElementById('detail-luas').innerText = `${f.properties.LUAS_HA} Ha`;
+            document.getElementById('detail-sph').innerText = `${f.properties.SPH} Pkk/Ha`;
+            document.getElementById('detail-yield').innerText = `${f.properties.YIELD_TON_HA} Ton/Ha`;
+
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(document.getElementById('chartProduksi').getContext('2d'), {
+              type: 'bar',
+              data: { labels: ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'], datasets: [{ data: f.properties.PROD_BULANAN, backgroundColor: '#059669', borderRadius: 4 }] },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+          });
+        }
+      }).addTo(map);
+
+      let tLuas = 0, tProd = 0, count = 0;
+      data.features.forEach(f => { tLuas += f.properties.LUAS_HA; tProd += f.properties.PROD_TOTAL_TON; count++; });
+      
+      document.getElementById('kpi-produksi').innerText = tProd > 0 ? `${tProd.toFixed(1)} Ton` : '0 Ton';
+      document.getElementById('kpi-luas').innerText = tLuas > 0 ? `${tLuas.toFixed(1)} Ha` : '0 Ha';
+      document.getElementById('kpi-yield').innerText = tLuas > 0 ? `${(tProd/tLuas).toFixed(2)} Ton/Ha` : '0 Ton/Ha';
+      document.getElementById('kpi-sph').innerText = count > 0 ? '132 Pkk/Ha' : '0 Pkk/Ha';
+
+      if (geojsonLayer.getBounds().isValid()) map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+    }
+
+    // =========================================================
+    // 5. FILTER LOGIC
+    // =========================================================
+    function applyFilter() {
+      const pt = document.getElementById('filter-pt').value, est = document.getElementById('filter-estate').value, afd = document.getElementById('filter-afdeling').value, src = document.getElementById('search-blok').value.toLowerCase();
+      loadGeoJSON({ type: "FeatureCollection", features: dataPerkebunanGeoJSON.features.filter(f => 
+        (pt === 'ALL' || f.properties.PT === pt) && (est === 'ALL' || f.properties.ESTATE === est) && 
+        (afd === 'ALL' || f.properties.AFDELING === afd) && (src === '' || f.properties.ID_BLOK.toLowerCase().includes(src))
+      )});
+    }
+    
+    ['filter-pt', 'filter-estate', 'filter-afdeling'].forEach(id => document.getElementById(id).addEventListener('change', applyFilter));
+    document.getElementById('search-blok').addEventListener('input', applyFilter);
+
+    // Load data awal
+    loadGeoJSON(dataPerkebunanGeoJSON);
+  </script>
+</body>
+</html>
