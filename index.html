@@ -8,8 +8,8 @@
   <!-- 1. Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- 2. Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- 2. Leaflet CSS (Diturunkan ke versi 1.7.1 agar stabil dengan alat ukur) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
 
   <!-- 3. Leaflet Measure CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.css" />
@@ -25,6 +25,9 @@
     .leaflet-control-measure .leaflet-control-measure-toggle { background-color: #fff; }
     .leaflet-measure-resultpopup a.zoomto { display: none !important; }
 
+    /* PERBAIKAN CSS: Mencegah Tailwind menggeser titik koordinat klik SVG Leaflet */
+    .leaflet-container svg { display: inline-block; vertical-align: baseline; }
+
     @keyframes pulse {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
       70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
@@ -38,12 +41,10 @@
   <!-- ========================================================= -->
   <!-- TOMBOL MELAYANG (MENU & GPS)                              -->
   <!-- ========================================================= -->
-  <!-- Tombol Hamburger (Menu) di Kiri Atas -->
   <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Buka Menu">
     <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
   </button>
 
-  <!-- Tombol GPS di Kanan -->
   <button id="btn-gps" class="absolute top-32 right-3 z-[1000] bg-white text-gray-700 hover:text-emerald-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Lacak Posisi GPS Saya">
     <i class="fa-solid fa-location-crosshairs text-lg"></i>
   </button>
@@ -59,14 +60,12 @@
         </h1>
         <p class="text-xs text-emerald-200">Monitoring Produksi & Agronomi</p>
       </div>
-      <!-- Tombol Tutup (X) -->
       <button id="btn-close-sidebar" class="text-white hover:text-emerald-300 transition-colors p-1" title="Tutup Menu">
         <i class="fa-solid fa-xmark text-2xl"></i>
       </button>
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-5">
-      <!-- 1. CASCADING FILTER -->
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
           <i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah
@@ -97,7 +96,6 @@
         </div>
       </section>
 
-      <!-- 2. SEARCH BLOK -->
       <section>
         <div class="relative">
           <input type="text" id="search-blok" placeholder="Cari Nomor Blok..." class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-300 rounded-lg outline-none">
@@ -105,7 +103,6 @@
         </div>
       </section>
 
-      <!-- 3. KPI WIDGET -->
       <section>
         <h2 class="text-xs font-bold text-gray-700 uppercase mb-2 flex items-center gap-1.5">
           <i class="fa-solid fa-chart-line text-emerald-600"></i> Ringkasan KPI
@@ -130,7 +127,6 @@
         </div>
       </section>
 
-      <!-- 4. DETAIL BLOK -->
       <section class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
         <h2 class="text-xs font-bold text-gray-800 border-b pb-2 mb-3 flex justify-between">
           <span><i class="fa-solid fa-circle-info text-emerald-600 mr-1"></i> Detail Blok</span>
@@ -160,7 +156,8 @@
   <!-- ========================================================= -->
   <!-- JAVASCRIPT LIBRARIES                                      -->
   <!-- ========================================================= -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- 1. Leaflet JS (Diturunkan ke versi 1.7.1) -->
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-measure@3.1.0/dist/leaflet-measure.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -173,35 +170,28 @@
     const btnToggle = document.getElementById('btn-sidebar-toggle');
     const btnClose = document.getElementById('btn-close-sidebar');
 
-    btnToggle.addEventListener('click', () => {
-      sidebar.classList.remove('-translate-x-full'); // Munculkan menu
-    });
-
-    btnClose.addEventListener('click', () => {
-      sidebar.classList.add('-translate-x-full'); // Sembunyikan menu
-    });
+    btnToggle.addEventListener('click', () => { sidebar.classList.remove('-translate-x-full'); });
+    btnClose.addEventListener('click', () => { sidebar.classList.add('-translate-x-full'); });
 
     // =========================================================
     // 1. INISIALISASI PETA & BASEMAP
     // =========================================================
-    // Matikan zoomControl default agar kita bisa atur posisinya ke kanan bawah
     const map = L.map('map', { zoomControl: false }).setView([-2.21, 113.92], 13);
     
-    // Tambahkan Zoom Control di Kanan Bawah agar tidak menabrak tombol menu
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
     const esriSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' });
     
     L.control.layers({ "Satelit (Esri)": esriSatelit, "OpenStreetMap": osm }, null, { position: 'topright' }).addTo(map);
-    map.addLayer(esriSatelit); // Satelit sebagai default
+    map.addLayer(esriSatelit);
 
     // =========================================================
     // 2. FITUR PENGUKURAN Jarak & Luas
     // =========================================================
     try {
       const measureControl = new L.Control.Measure({
-        position: 'topright', // Dipindah ke kanan atas di bawah Layer Control
+        position: 'topright', 
         primaryLengthUnit: 'meters', secondaryLengthUnit: 'kilometers',
         primaryAreaUnit: 'hectares', secondaryAreaUnit: 'sqmeters',
         activeColor: '#059669', completedColor: '#047857'
@@ -289,7 +279,7 @@
               options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
 
-            // Buka sidebar otomatis jika data diklik (Berguna saat layar HP)
+            // Buka sidebar otomatis jika data diklik
             sidebar.classList.remove('-translate-x-full');
           });
         }
