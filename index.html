@@ -29,10 +29,12 @@
 </head>
 <body class="bg-gray-100 h-screen w-full overflow-hidden font-sans relative">
 
+  <!-- Tombol Menu Kiri -->
   <button id="btn-sidebar-toggle" class="absolute top-4 left-4 z-[2000] bg-white text-emerald-800 hover:text-emerald-600 p-2 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center">
     <i class="fa-solid fa-bars text-xl w-7 h-7 flex items-center justify-center"></i>
   </button>
 
+  <!-- Tombol Alat Kanan -->
   <div class="absolute top-32 right-3 z-[1000] flex flex-col gap-2">
     <button id="btn-location" class="bg-white text-gray-700 hover:text-blue-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Cari & Zoom Lokasi Saya"><i class="fa-solid fa-location-crosshairs text-lg"></i></button>
     <button id="btn-track" class="bg-white text-gray-700 hover:text-red-600 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Mulai Rekam Jejak (Tracking)"><i class="fa-solid fa-route text-lg" id="track-icon"></i></button>
@@ -41,6 +43,7 @@
     <button id="btn-clear-layers" class="bg-white text-gray-700 hover:text-red-500 p-2.5 rounded-lg shadow-md border border-gray-200 transition-all flex items-center justify-center" title="Aktifkan Mode Hapus (Pilih Titik/Rute)"><i class="fa-solid fa-eraser text-lg" id="eraser-icon"></i></button>
   </div>
 
+  <!-- Sidebar -->
   <aside id="sidebar" class="fixed top-0 left-0 z-[3000] h-full w-80 md:w-96 bg-white shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out flex flex-col border-r border-gray-200">
     <div class="p-4 bg-emerald-800 text-white flex items-center justify-between">
       <div>
@@ -51,12 +54,20 @@
     </div>
 
     <div class="p-4 overflow-y-auto flex-1 space-y-4">
+      
+      <!-- Upload Manual -->
+      <section class="bg-amber-50 p-3.5 rounded-lg border border-amber-200 space-y-2">
+        <h2 class="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-file-csv"></i> Upload CSV Manual</h2>
+        <p class="text-[10px] text-amber-700">Gunakan jika server lokal memblokir akses file otomatis.</p>
+        <input type="file" id="csv-file-input" accept=".csv" class="w-full text-xs text-gray-700 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-amber-600 file:text-white cursor-pointer hover:file:bg-amber-700 transition-colors">
+      </section>
+
       <section class="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-3">
         <h2 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-filter text-emerald-600"></i> Filter Wilayah & Waktu</h2>
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Tahun Produksi</label>
           <select id="filter-tahun" class="w-full text-xs bg-white border border-gray-300 rounded-md p-2 outline-none font-semibold text-emerald-800">
-            <option value="ALL">-- Tahun Berjalan (YTD) --</option>
+            <option value="ALL">-- Tahun Berjalan (YTD / Terbaru) --</option>
           </select>
         </div>
         <div>
@@ -130,12 +141,10 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <script>
-    // UI Toggle
     const sidebar = document.getElementById('sidebar');
     document.getElementById('btn-sidebar-toggle').addEventListener('click', () => { sidebar.classList.remove('-translate-x-full'); });
     document.getElementById('btn-close-sidebar').addEventListener('click', () => { sidebar.classList.add('-translate-x-full'); });
 
-    // Map Init
     const map = L.map('map', { zoomControl: false }).setView([-2.21, 113.92], 13);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
@@ -144,7 +153,73 @@
     
     try { new L.Control.Measure({ position: 'topright', primaryLengthUnit: 'meters', primaryAreaUnit: 'hectares', activeColor: '#059669', completedColor: '#047857' }).addTo(map); } catch (e) {}
 
-    // DATA STATE
+    let userMarker = null, accuracyCircle = null;
+    let isTracking = false, isFirstLocation = true, isDeleteMode = false;
+    const drawnFieldItems = L.featureGroup().addTo(map);
+    let currentTrackLine = null, currentTrackCoords = [];
+
+    const userGpsIcon = L.divIcon({ className: 'custom-gps-marker', html: `<div class="w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-lg pulse-animation"></div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
+
+    document.getElementById('btn-location').addEventListener('click', () => { if (isTracking && userMarker) map.flyTo(userMarker.getLatLng(), 17); else map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }); });
+    map.on('locationfound', function (e) {
+      if (!userMarker) { userMarker = L.marker(e.latlng, { icon: userGpsIcon }).addTo(map); accuracyCircle = L.circle(e.latlng, { radius: e.accuracy, color: '#2563eb', fillOpacity: 0.15 }).addTo(map); }
+      else { userMarker.setLatLng(e.latlng); accuracyCircle.setLatLng(e.latlng); accuracyCircle.setRadius(e.accuracy); }
+      if (isTracking) {
+        currentTrackCoords.push(e.latlng);
+        if (!currentTrackLine) { currentTrackLine = L.polyline(currentTrackCoords, { color: '#ef4444', weight: 4 }).addTo(drawnFieldItems); }
+        else { currentTrackLine.setLatLngs(currentTrackCoords); }
+        if (isFirstLocation) { map.flyTo(e.latlng, 17); isFirstLocation = false; } else { map.panTo(e.latlng); }
+      }
+    });
+
+    document.getElementById('btn-track').addEventListener('click', function () {
+      if (!isTracking) {
+        isTracking = true; isFirstLocation = true; map.locate({ setView: false, watch: true, enableHighAccuracy: true });
+        this.classList.add('text-red-600', 'bg-red-50'); document.getElementById('track-icon').className = 'fa-solid fa-stop text-lg';
+      } else {
+        map.stopLocate(); currentTrackLine = null; currentTrackCoords = []; isTracking = false;
+        this.classList.remove('text-red-600', 'bg-red-50'); document.getElementById('track-icon').className = 'fa-solid fa-route text-lg';
+      }
+    });
+
+    document.getElementById('btn-add-point').addEventListener('click', () => {
+      let pinLoc = userMarker ? userMarker.getLatLng() : map.getCenter();
+      let pName = prompt("Nama titik:", "Area Peninjauan");
+      if (pName) { L.marker(pinLoc).addTo(drawnFieldItems).bindPopup(`<b>${pName.trim()}</b>`).openPopup(); }
+    });
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      let geojson = drawnFieldItems.toGeoJSON();
+      if (geojson.features.length === 0) return alert("Belum ada rute atau titik lapangan.");
+      let url = URL.createObjectURL(new Blob([JSON.stringify(geojson, null, 2)], { type: "application/json" }));
+      let a = document.createElement('a'); a.href = url; a.download = "Data_Lapangan_WebGIS.geojson";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    });
+
+    const btnClearLayers = document.getElementById('btn-clear-layers');
+    btnClearLayers.addEventListener('click', () => {
+      if (drawnFieldItems.getLayers().length === 0 && !isDeleteMode) return alert("Belum ada jejak yang bisa dihapus.");
+      isDeleteMode = !isDeleteMode; 
+      if (isDeleteMode) {
+        btnClearLayers.classList.replace('bg-white', 'bg-red-500'); btnClearLayers.classList.replace('text-gray-700', 'text-white');
+        document.getElementById('map').style.cursor = 'crosshair';
+      } else {
+        btnClearLayers.classList.replace('bg-red-500', 'bg-white'); btnClearLayers.classList.replace('text-white', 'text-gray-700');
+        document.getElementById('map').style.cursor = ''; 
+      }
+    });
+
+    drawnFieldItems.on('click', function(e) {
+      if (isDeleteMode) {
+        if (e.layer.closePopup) e.layer.closePopup(); 
+        if (confirm("Hapus rute/titik ini?")) { drawnFieldItems.removeLayer(e.layer); if (e.layer === currentTrackLine) { currentTrackLine = null; currentTrackCoords = []; } }
+      }
+    });
+
+
+    // =========================================================
+    // STATE DATA & AKUMULASI PRODUKSI TAHUNAN
+    // =========================================================
     let geojsonLayer = null;
     let chartInstance = null;
     let rawGeoJsonData = null; 
@@ -152,9 +227,8 @@
     let availableYears = new Set();
     let latestYear = null;
 
-    // Helpers
     function getColor(y) { return y > 22 ? '#2b8a3e' : y > 18 ? '#74b816' : y > 14 ? '#f59f00' : '#e03131'; }
-    function cleanKey(k) { return String(k).toLowerCase().replace(/[^a-z0-9]/g, ''); } // Hapus spasi dan simbol dari string pencarian
+    function cleanKey(k) { return String(k).toLowerCase().replace(/[^a-z0-9]/g, ''); }
     function cleanBlokId(str) { return String(str || '').replace(/BLOK/ig, '').replace(/BLOCK/ig, '').trim().toUpperCase(); }
 
     function getPropByFuzzyKey(p, targetKeys) {
@@ -185,23 +259,111 @@
 
     function getProductionDataForBlok(blokId, selectedYear) {
       let targetYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : latestYear;
-      return (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) ? csvHistoriData[blokId][targetYear] : { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+      if (csvHistoriData[blokId] && csvHistoriData[blokId][targetYear]) {
+        return csvHistoriData[blokId][targetYear];
+      }
+      return { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
     }
 
-    function filterTonBulananCSV(rowObj) {
-      const bulanPendek = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
-      return bulanPendek.map((bp) => {
-        let val = 0;
-        let keys = Object.keys(rowObj).filter(k => {
+    // MESIN PENGOLAH DATA CSV VERTIKAL
+    function processCsvData(dataRows, isManualUpload = false) {
+      csvHistoriData = {};
+      availableYears.clear();
+      let rowParsedCount = 0;
+
+      const bulanMap = {
+        'jan': 0, 'januari': 0,
+        'feb': 1, 'februari': 1,
+        'mar': 2, 'maret': 2,
+        'apr': 3, 'april': 3,
+        'mei': 4, 'may': 4,
+        'jun': 5, 'juni': 5,
+        'jul': 6, 'juli': 6,
+        'agu': 7, 'aug': 7, 'agustus': 7,
+        'sep': 8, 'september': 8,
+        'okt': 9, 'oct': 9, 'oktober': 9,
+        'nov': 10, 'november': 10,
+        'des': 11, 'dec': 11, 'desember': 11
+      };
+
+      let tempContainer = {};
+
+      dataRows.forEach(row => {
+        let blokId = '', tahun = '', bulanStr = '', tonVal = 0;
+
+        for (let k in row) {
           let ck = cleanKey(k);
-          return ck.includes(bp) && !ck.includes('jjg') && !ck.includes('janjang');
-        });
-        if (keys.length > 0) {
-          let tonKey = keys.find(k => cleanKey(k).includes('ton') || cleanKey(k).includes('kg'));
-          val = parseAngka(rowObj[tonKey || keys[0]]);
+          let val = String(row[k] || '').trim();
+
+          if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok' || ck === 'block') {
+            blokId = cleanBlokId(val);
+          } else if (ck.includes('tahun') || ck.includes('year')) {
+            tahun = val;
+          } else if (ck.includes('bulan') || ck === 'month' || ck === 'bln') {
+            bulanStr = val.toLowerCase();
+          } else if (ck === 'ton' || (ck.includes('ton') && !ck.includes('jjg') && !ck.includes('janjang'))) {
+            tonVal = parseAngka(val);
+          }
         }
-        return val;
+
+        if (blokId && tahun && bulanStr) {
+          availableYears.add(tahun);
+          if (!tempContainer[blokId]) tempContainer[blokId] = {};
+          if (!tempContainer[blokId][tahun]) {
+            tempContainer[blokId][tahun] = { bulanan: [0,0,0,0,0,0,0,0,0,0,0,0], total: 0 };
+          }
+
+          let bIdx = -1;
+          for (let key in bulanMap) {
+            if (bulanStr.includes(key)) {
+              bIdx = bulanMap[key];
+              break;
+            }
+          }
+          if (bIdx === -1 && !isNaN(Number(bulanStr))) {
+            bIdx = Number(bulanStr) - 1;
+          }
+
+          if (bIdx >= 0 && bIdx < 12) {
+            tempContainer[blokId][tahun].bulanan[bIdx] = tonVal;
+            rowParsedCount++;
+          }
+        }
       });
+
+      // Akumulasi total ton di tahun yang sama
+      for (let bId in tempContainer) {
+        csvHistoriData[bId] = {};
+        for (let thn in tempContainer[bId]) {
+          let arrBulan = tempContainer[bId][thn].bulanan;
+          let sumTotal = arrBulan.reduce((a, b) => a + b, 0); // Jumlah total data ton pada tahun tersebut
+          csvHistoriData[bId][thn] = {
+            bulanan: arrBulan,
+            total: sumTotal
+          };
+        }
+      }
+
+      if (isManualUpload) {
+        alert(`SUKSES! Berhasil mengakumulasi ${rowParsedCount} baris data produksi.`);
+      }
+
+      let sortedYears = Array.from(availableYears).sort();
+      latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
+
+      let tahunSelect = document.getElementById('filter-tahun');
+      let currentSelectedYear = tahunSelect.value;
+      
+      tahunSelect.innerHTML = '<option value="ALL">-- Tahun Berjalan (YTD / Terbaru) --</option>';
+      sortedYears.forEach(y => { 
+        tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`; 
+      });
+      
+      if (sortedYears.includes(currentSelectedYear)) {
+        tahunSelect.value = currentSelectedYear;
+      }
+
+      if (rawGeoJsonData) applyFilter();
     }
 
     function loadBackendCsv() {
@@ -210,54 +372,28 @@
         header: true,
         skipEmptyLines: true,
         complete: function(results) {
-          csvHistoriData = {};
-          availableYears.clear();
-          let matched = 0;
-
-          results.data.forEach(row => {
-            let blokId = '', tahun = '';
-            
-            for (let k in row) {
-              let ck = cleanKey(k);
-              if (ck.includes('idblok') || ck === 'blok' || ck === 'kodeblok') blokId = cleanBlokId(row[k]);
-              if (ck.includes('tahun') || ck.includes('year')) tahun = String(row[k]).trim();
-            }
-
-            if (blokId && tahun) {
-              availableYears.add(tahun);
-              if (!csvHistoriData[blokId]) csvHistoriData[blokId] = {};
-              
-              let bulananVals = filterTonBulananCSV(row);
-              let totalVal = 0;
-              let keyTotal = Object.keys(row).find(k => {
-                let ck = cleanKey(k);
-                return (ck.includes('total') || ck.includes('prod')) && !ck.includes('jjg') && !ck.includes('janjang') && ck.includes('ton');
-              });
-              
-              if(keyTotal) totalVal = parseAngka(row[keyTotal]);
-              else totalVal = bulananVals.reduce((a, b) => a + b, 0);
-
-              csvHistoriData[blokId][tahun] = { bulanan: bulananVals, total: totalVal };
-              matched++;
-            }
-          });
-
-          if(matched === 0 && results.data.length > 0) {
-              console.warn("PERINGATAN: File CSV berhasil dimuat, tetapi sistem tidak menemukan kolom dengan nama 'ID_Blok' dan 'Tahun'. Header yang terbaca:", Object.keys(results.data[0]));
-          }
-
-          let sortedYears = Array.from(availableYears).sort();
-          latestYear = sortedYears.length > 0 ? sortedYears[sortedYears.length - 1] : null;
-
-          let tahunSelect = document.getElementById('filter-tahun');
-          tahunSelect.innerHTML = '<option value="ALL">-- Tahun Berjalan (YTD) --</option>';
-          sortedYears.forEach(y => { tahunSelect.innerHTML += `<option value="${y}">${y}${y === latestYear ? ' (Terbaru)' : ''}</option>`; });
-
-          if (rawGeoJsonData) applyFilter();
+          processCsvData(results.data, false);
         }
       });
     }
 
+    document.getElementById('csv-file-input').addEventListener('change', function(e) {
+      let file = e.target.files[0];
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          processCsvData(results.data, true);
+        },
+        error: function(err) { alert("Gagal membaca file CSV: " + err.message); }
+      });
+    });
+
+
+    // =========================================================
+    // RENDER PETA & KPI (FILTER TAHUN AKTIF)
+    // =========================================================
     function renderMapAndKPI(dataToRender) {
       if (geojsonLayer) map.removeLayer(geojsonLayer);
       let selectedYear = document.getElementById('filter-tahun').value;
@@ -273,8 +409,12 @@
           let prop = f.properties;
           let blokId = getBlokId(prop);
           let l = getLuasValue(prop);
-          let yieldTon = l > 0 ? (getProductionDataForBlok(blokId, selectedYear).total / l) : 0;
-          layer.bindPopup(`<b>Blok ${blokId}</b><br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
+          let prodInfo = getProductionDataForBlok(blokId, selectedYear);
+          let yieldTon = l > 0 ? (prodInfo.total / l) : 0;
+          
+          let targetLblYear = (selectedYear && selectedYear !== 'ALL') ? selectedYear : (latestYear || 'YTD');
+          layer.bindPopup(`<b>Blok ${blokId}</b><br>Tahun: ${targetLblYear}<br>Prod: ${prodInfo.total.toFixed(2)} Ton<br>Yield: ${yieldTon.toFixed(2)} Ton/Ha`);
+          
           layer.on('click', () => {
             document.getElementById('filter-blok').value = blokId;
             showBlokDetail(prop);
@@ -289,7 +429,10 @@
         let prodInfo = getProductionDataForBlok(getBlokId(p), selectedYear);
         let sph = Number(getPropByFuzzyKey(p, ['sph', 'pokokha'])) || 0;
 
-        tLuas += l; tProd += prodInfo.total; totalSphSum += sph; count++;
+        tLuas += l; 
+        tProd += prodInfo.total; // Akumulasi total ton pada tahun yang dipilih
+        totalSphSum += sph; 
+        count++;
       });
 
       let avgYield = tLuas > 0 ? (tProd / tLuas) : 0;
@@ -307,8 +450,9 @@
       let luasHa = getLuasValue(prop);
       let prodInfo = getProductionDataForBlok(blokId, selYear);
       let yieldTon = luasHa > 0 ? (prodInfo.total / luasHa) : 0;
+      let targetLblYear = (selYear && selYear !== 'ALL') ? selYear : (latestYear || '-');
 
-      document.getElementById('detail-blok-id').innerText = `Blok ${blokId}`;
+      document.getElementById('detail-blok-id').innerText = `Blok ${blokId} (${targetLblYear})`;
       document.getElementById('detail-tt').innerText = getTahunTanamValue(prop);
       document.getElementById('detail-luas').innerText = `${luasHa.toFixed(2)} Ha`;
       document.getElementById('detail-sph').innerText = `${Number(getPropByFuzzyKey(prop, ['sph', 'pokokha'])) || 0} Pokok/Ha`;
@@ -368,11 +512,12 @@
     
     ['filter-tahun', 'filter-pt', 'filter-estate', 'filter-afdeling', 'filter-blok'].forEach(id => document.getElementById(id).addEventListener('change', applyFilter));
 
+    // START APLIKASI
     fetch('test.json').then(r => r.json()).then(data => {
       rawGeoJsonData = data; populateDropdowns(data.features); renderMapAndKPI(data);
       if (geojsonLayer) map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
       loadBackendCsv(); 
-    }).catch(e => alert("Gagal memuat test.json. Pastikan lewat Local Server (Live Server)."));
+    }).catch(e => alert("Gagal memuat test.json. Pastikan lewat Local Server."));
   </script>
 </body>
 </html>
